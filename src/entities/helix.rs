@@ -68,6 +68,7 @@ fn radius_from_axis(helix: &Helix, value: Vec3) -> Option<f64> {
 }
 
 fn top_radius(helix: &Helix) -> f64 {
+    if helix.turns == 0.0 { return helix.radius; }
     spline_curve(&helix.spline)
         .map(|curve| Vec3::from(curve.point_at(1.0)))
         .and_then(|endpoint| radius_from_axis(helix, endpoint))
@@ -129,9 +130,14 @@ fn perpendicular(axis: Vec3) -> Option<Vec3> {
 }
 
 fn rebuild(helix: &mut Helix, top_radius: f64) -> bool {
-    let Some(curve) = kernel_curve(helix, top_radius) else {
+    rebuild_with_radial(helix, top_radius, None)
+}
+
+fn rebuild_with_radial(helix: &mut Helix, top_radius: f64, radial: Option<Vec3>) -> bool {
+    let Some(mut curve) = kernel_curve(helix, top_radius) else {
         return false;
     };
+    if let Some(radial) = radial { curve.start_direction = radial.to_array(); }
     let Some(nurbs) = curve.nurbs() else {
         return false;
     };
@@ -152,7 +158,7 @@ fn rebuild(helix: &mut Helix, top_radius: f64) -> bool {
     helix.spline.flags.closed = false;
     helix.spline.flags.periodic = false;
     helix.spline.flags.rational = nurbs.is_rational();
-    helix.spline.flags.planar = false;
+    helix.spline.flags.planar = curve.height == 0.0;
     helix.spline.flags.linear = false;
     true
 }
@@ -274,10 +280,12 @@ fn apply_geom_prop(helix: &mut Helix, field: &str, value: &str) {
             helix.axis_base_point = vector(base);
             helix.start_point = vector(point(helix.start_point) + delta);
         }
-        "height" if number.abs() > EPSILON => {
+        "height" => {
+            if number < 0.0 { helix.axis_vector = vector(-point(helix.axis_vector)); }
+            let number = number.abs();
             if helix.constraint == HelixConstraint::TurnHeight && helix.turn_height.abs() > EPSILON {
                 let turns = number / helix.turn_height;
-                if turns <= EPSILON {
+                if turns < 0.0 {
                     return;
                 }
                 helix.turns = turns;
@@ -285,16 +293,18 @@ fn apply_geom_prop(helix: &mut Helix, field: &str, value: &str) {
                 helix.turn_height = number / helix.turns.max(EPSILON);
             }
         }
-        "turns" if number > EPSILON => {
-            if helix.constraint == HelixConstraint::TurnHeight {
+        "turns" if number >= 0.0 => {
+            if number == 0.0 { helix.turns = 0.0; }
+            else if helix.constraint == HelixConstraint::TurnHeight {
                 helix.turns = number;
             } else {
                 helix.turns = number;
                 helix.turn_height = old_height / number;
             }
         }
-        "turn_height" if number.abs() > EPSILON => {
-            if helix.constraint == HelixConstraint::Turns {
+        "turn_height" if number >= 0.0 => {
+            if number == 0.0 { helix.turn_height = 0.0; }
+            else if helix.constraint == HelixConstraint::Turns {
                 helix.turn_height = number;
             } else {
                 let turns = old_height / number;
@@ -305,11 +315,13 @@ fn apply_geom_prop(helix: &mut Helix, field: &str, value: &str) {
                 helix.turns = turns;
             }
         }
-        "base_radius" if number > EPSILON => {
+        "base_radius" if number >= 0.0 => {
             let Some((base, _, start_direction)) = axis_frame(helix) else {
                 return;
             };
             helix.start_point = vector(base + start_direction * number);
+            if !rebuild_with_radial(helix, top, Some(start_direction)) { *helix = original; }
+            return;
         }
         "top_radius" if number >= 0.0 => {
             if !rebuild(helix, number) {
