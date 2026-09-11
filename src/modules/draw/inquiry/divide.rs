@@ -19,6 +19,7 @@ pub struct MarkerCommand<const MEASURE: bool> {
     align: bool,
     plane: WorkingPlane,
     valid_pick: bool,
+    value_origin: Option<DVec3>,
 }
 
 pub type DivideCommand = MarkerCommand<false>;
@@ -28,7 +29,7 @@ impl<const MEASURE: bool> MarkerCommand<MEASURE> {
     pub fn new() -> Self {
         Self { target: None, pick_point: DVec3::ZERO, step: Step::Pick,
             blocks: Vec::new(), block: None, align: true,
-            plane: WorkingPlane::default(), valid_pick: false }
+            plane: WorkingPlane::default(), valid_pick: false, value_origin: None }
     }
     pub fn with_blocks(mut self, blocks: Vec<String>) -> Self {
         self.blocks = blocks;
@@ -44,6 +45,7 @@ impl<const MEASURE: bool> MarkerCommand<MEASURE> {
 impl<const MEASURE: bool> CadCommand for MarkerCommand<MEASURE> {
     fn name(&self) -> &'static str { if MEASURE { "MEASURE" } else { "DIVIDE" } }
     fn prompt(&self) -> String {
+        if self.value_origin.is_some() { return "MEASURE  Specify second point:".into(); }
         let prompt = match self.step {
             Step::Pick if MEASURE => "Select object to measure:",
             Step::Pick => "Select object to divide:",
@@ -57,6 +59,7 @@ impl<const MEASURE: bool> CadCommand for MarkerCommand<MEASURE> {
         format!("{}  {}", self.name(), prompt)
     }
     fn options(&self) -> Vec<CmdOption> {
+        if self.value_origin.is_some() { return vec![]; }
         match self.step {
             Step::Amount if self.block.is_none() => vec![CmdOption::new("Block", "B")],
             Step::Align => vec![CmdOption::new("Yes", "Y"), CmdOption::new("No", "N")],
@@ -78,7 +81,8 @@ impl<const MEASURE: bool> CadCommand for MarkerCommand<MEASURE> {
     }
     fn wants_text_input(&self) -> bool { self.step != Step::Pick }
     fn dyn_field(&self) -> crate::command::DynField {
-        if self.step == Step::Amount { crate::command::DynField::Scalar }
+        if self.step == Step::Amount && MEASURE { crate::command::DynField::Distance }
+        else if self.step == Step::Amount { crate::command::DynField::Scalar }
         else { crate::command::DynField::Point }
     }
     fn dyn_commit_as_text(&self) -> bool { self.step == Step::Amount }
@@ -98,7 +102,7 @@ impl<const MEASURE: bool> CadCommand for MarkerCommand<MEASURE> {
                 self.step = Step::Amount;
             }
             Step::Amount => {
-                if self.block.is_none() && matches!(text.to_ascii_uppercase().as_str(), "B" | "BLOCK") {
+                if self.block.is_none() && self.value_origin.is_none() && matches!(text.to_ascii_uppercase().as_str(), "B" | "BLOCK") {
                     self.step = Step::BlockName;
                 } else if MEASURE {
                     let segment_length = text.replace(',', ".").parse::<f64>().ok()
@@ -114,7 +118,21 @@ impl<const MEASURE: bool> CadCommand for MarkerCommand<MEASURE> {
         }
         Some(CmdResult::NeedPoint)
     }
-    fn on_point(&mut self, _pt: DVec3) -> CmdResult { CmdResult::NeedPoint }
+    fn dyn_live_value(&self, cursor: DVec3) -> Option<f64> {
+        if !MEASURE || self.step != Step::Amount || !cursor.is_finite() { return None; }
+        let origin = self.value_origin?;
+        let distance = cadkernel::space::Vec3::from(cursor.to_array()).distance(origin.to_array().into());
+        (distance.is_finite() && distance > 0.0).then_some(distance)
+    }
+    fn on_point(&mut self, pt: DVec3) -> CmdResult {
+        if MEASURE && self.step == Step::Amount && pt.is_finite() {
+            if self.value_origin.is_none() { self.value_origin = Some(pt); }
+            else if let Some(value) = self.dyn_live_value(pt) {
+                return self.on_text_input(&value.to_string()).unwrap_or(CmdResult::NeedPoint);
+            }
+        }
+        CmdResult::NeedPoint
+    }
     fn on_enter(&mut self) -> CmdResult {
         if self.step == Step::Align {
             self.align = true;
