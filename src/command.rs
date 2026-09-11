@@ -13,13 +13,21 @@ use glam::DVec3;
 
 #[derive(Clone, Debug)]
 pub enum HatchEditOperation {
+    Appearance {
+        color: Option<acadrust::types::Color>,
+        layer: Option<String>,
+        transparency: Option<acadrust::types::Transparency>,
+    },
     Update {
         origin: Option<(f64, f64)>,
         disassociate: bool,
         style: Option<acadrust::entities::HatchStyleType>,
         annotative: Option<bool>,
     },
-    RecreateBoundary,
+    RecreateBoundary { associate: bool },
+    BeginAssociate,
+    AssociateBoundaries(Vec<Handle>),
+    DrawOrderBoundary { above: bool },
     Separate,
     AddBoundaries(Vec<Handle>),
     RemoveBoundaries(Vec<Handle>),
@@ -1481,9 +1489,9 @@ pub enum CmdResult {
         op: crate::modules::draw::modify::pedit::PeditOp,
     },
     /// Place Point entities at N equal intervals along the entity.
-    DivideEntity { handle: Handle, n: usize },
+    DivideEntity { handle: Handle, n: usize, marker: Option<CurveMarker> },
     /// Place Point entities at `segment_length` intervals along the entity.
-    MeasureEntity { handle: Handle, segment_length: f64 },
+    MeasureEntity { handle: Handle, segment_length: f64, pick_point: DVec3, marker: Option<CurveMarker> },
     /// Extend/trim a Line or Arc by the given mode; end command.
     LengthenEntity {
         handle: Handle,
@@ -1939,7 +1947,16 @@ impl InputKind {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct CurveMarker {
+    pub block: String,
+    pub align: bool,
+    pub plane: WorkingPlane,
+}
+
 pub trait CadCommand: Send {
+    /// Preserve source appearance for commands that extract existing entities.
+    fn preserve_commit_style(&self) -> bool { false }
     /// Keep the layer already carried by entities committed by this command
     /// instead of replacing it with the current drawing layer.
     fn preserve_commit_layer(&self) -> bool {
@@ -2508,4 +2525,3 @@ mod tests {
         assert!(names.contains(&"M2P"));
     }
 }
-

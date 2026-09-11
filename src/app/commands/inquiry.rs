@@ -294,6 +294,7 @@ impl OpenCADStudio {
                     header.surface_u_density,
                     header.surface_v_density,
                 )
+                .with_entities(self.tabs[i].scene.document.entities().cloned())
                 .with_preselection(&preselected);
                 self.command_line.push_info(&cmd_obj.prompt());
                 self.tabs[i].active_cmd = Some(Box::new(cmd_obj));
@@ -975,14 +976,14 @@ impl OpenCADStudio {
 
             "DIVIDE" => {
                 use crate::modules::draw::inquiry::divide::DivideCommand;
-                let cmd = DivideCommand::new();
+                let cmd = DivideCommand::new().with_blocks(self.tabs[i].scene.custom_block_names());
                 self.command_line.push_info(&cmd.prompt());
                 self.tabs[i].active_cmd = Some(Box::new(cmd));
             }
 
             "MEASURE" => {
                 use crate::modules::draw::inquiry::divide::MeasureCommand;
-                let cmd = MeasureCommand::new();
+                let cmd = MeasureCommand::new().with_blocks(self.tabs[i].scene.custom_block_names());
                 self.command_line.push_info(&cmd.prompt());
                 self.tabs[i].active_cmd = Some(Box::new(cmd));
             }
