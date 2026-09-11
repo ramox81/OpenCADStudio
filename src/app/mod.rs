@@ -512,6 +512,7 @@ pub(super) struct OpenCADStudio {
     /// Selected-object count past which grips stop being generated
     /// (GRIPOBJLIMIT, 0..=32767; 0 = no limit).
     grip_object_limit: i32,
+    ncopy_bind: bool,
     /// Drawing viewport cursor style (CURSORTYPE).
     cursor_type: settings::CursorType,
     /// Explicit crosshair colour; `None` retains automatic contrast.
@@ -3462,6 +3463,7 @@ impl OpenCADStudio {
             double_click_block_refedit: false,
             double_click_block_attedit: true,
             grip_object_limit: settings::DEFAULT_GRIP_OBJECT_LIMIT,
+            ncopy_bind: false,
             cursor_type: settings::CursorType::Crosshair,
             crosshair_color: None,
             crosshair_color_input: String::new(),
