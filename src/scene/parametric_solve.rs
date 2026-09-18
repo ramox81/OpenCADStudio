@@ -2325,6 +2325,39 @@ fn solve_scope(
         })
         .flatten();
         let pinned = axis_pin.unwrap_or(*reference);
+        // The re-aligned entity keeps the length the transform gave it (a
+        // scaled vertical line stays scaled), not its pre-edit length.
+        if axis_pin.is_some() {
+            let segment = reference
+                .segment_index()
+                .or_else(|| {
+                    constraints.iter().find_map(|c| {
+                        c.refs
+                            .iter()
+                            .find(|r| r.entity == reference.entity)
+                            .and_then(|r| r.segment_index())
+                    })
+                });
+            let line = resolve_ref(document, &mut sys, &mut cache, *reference).and_then(|geometry| {
+                match (&geometry, segment) {
+                    (EntityGeom::Polyline { .. }, Some(index)) => geometry.line_segment(index),
+                    (EntityGeom::Line(line) | EntityGeom::Ray(line) | EntityGeom::XLine(line), _) => {
+                        Some(*line)
+                    }
+                    _ => None,
+                }
+            });
+            if let Some(line) = line {
+                let length = {
+                    let store = sys.store();
+                    let dx = store.get(line.p2.x) - store.get(line.p1.x);
+                    let dy = store.get(line.p2.y) - store.get(line.p1.y);
+                    (dx * dx + dy * dy).sqrt()
+                };
+                let target = sys.add_param(length, true);
+                sys.add_constraint(Rc::new(P2PDistance::new(line.p1, line.p2, target)));
+            }
+        }
         let temporary = ParametricConstraint {
             id: ConstraintId::MAX,
             kind: ConstraintKind::Fixed,
