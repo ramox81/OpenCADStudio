@@ -1038,6 +1038,18 @@ fn retained_tangent_side(
     Some(dx * (center[1] - y1) - dy * (center[0] - x1) >= 0.0)
 }
 
+/// A solve result with no extent left — the only way the solver could
+/// honour every constraint after an edit that contradicted them.
+fn collapsed_by_solve(entity: &EntityType) -> bool {
+    const EPS: f64 = 1.0e-9;
+    match entity {
+        EntityType::Line(line) => (line.end - line.start).length() <= EPS,
+        EntityType::Circle(circle) => circle.radius <= EPS,
+        EntityType::Arc(arc) => arc.radius <= EPS,
+        _ => false,
+    }
+}
+
 /// The kernel parameters a `Fixed` constraint on `r` holds in place: a
 /// polyline segment's endpoints (plus center/radius for an arc segment), one
 /// addressable point, or every intrinsic parameter of a whole entity. Arc
@@ -3479,6 +3491,19 @@ impl Scene {
                 self.parametric_constraints[i].conflicts.clear();
             }
             for (handle, new_entity) in solved {
+                // An edit the constraints can only satisfy by collapsing the
+                // entity (a rotated line whose start is fixed and direction
+                // constrained) is refused: the entity goes back to its
+                // pre-edit shape, as the reference does.
+                let new_entity = match originals.get(&handle) {
+                    Some(original)
+                        if collapsed_by_solve(&new_entity)
+                            && !collapsed_by_solve(original.as_ref()) =>
+                    {
+                        original.as_ref().clone()
+                    }
+                    _ => new_entity,
+                };
                 if let Some(before) = self.document.get_entity_arc(handle) {
                     self.record_undo_before(handle, Some(before));
                 }
