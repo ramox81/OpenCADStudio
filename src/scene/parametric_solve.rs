@@ -2301,10 +2301,34 @@ fn solve_scope(
         if fixed_touches(reference.entity) {
             continue;
         }
+        // A transformed entity with a Horizontal/Vertical relation keeps
+        // only its end point where the transform put it; the rest re-aligns
+        // to the axis at the retained length (a rotated vertical line stays
+        // vertical below its moved end, as in the reference) instead of the
+        // whole-entity pin contradicting the axis and failing the solve.
+        let axis_pin = reference.marker.is_none().then(|| {
+            constraints.iter().find_map(|c| {
+                (c.enabled && matches!(c.kind, ConstraintKind::Horizontal | ConstraintKind::Vertical))
+                    .then(|| c.refs.iter().find(|r| r.entity == reference.entity))
+                    .flatten()
+                    .map(|r| match r.directional_axis() {
+                        Some(super::parametric_constraints::DirectionalAxis::TextBaseline) => {
+                            ParametricRef::point(r.entity, 0)
+                        }
+                        Some(_) => ParametricRef::center(r.entity),
+                        None => ParametricRef::point(
+                            r.entity,
+                            r.segment_index().map_or(1, |index| index as i32 + 1),
+                        ),
+                    })
+            })
+        })
+        .flatten();
+        let pinned = axis_pin.unwrap_or(*reference);
         let temporary = ParametricConstraint {
             id: ConstraintId::MAX,
             kind: ConstraintKind::Fixed,
-            refs: vec![*reference],
+            refs: vec![pinned],
             driving_param: None,
             enabled: true,
             native_origin: None,
