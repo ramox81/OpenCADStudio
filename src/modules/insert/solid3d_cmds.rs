@@ -1822,7 +1822,7 @@ impl CadCommand for SweepCommand {
         self.step == SweepStep::PickPath
     }
 
-    fn on_entity_pick(&mut self, handle: Handle, _pt: DVec3) -> CmdResult {
+    fn on_entity_pick(&mut self, handle: Handle, pt: DVec3) -> CmdResult {
         if self.step != SweepStep::PickPath || handle.is_null() || self.contains_profile(handle) {
             self.injected_path = None;
             return CmdResult::NeedPoint;
@@ -1835,6 +1835,7 @@ impl CadCommand for SweepCommand {
         let Some(path) = path.filter(crate::scene::model::sweep_model::is_sweep_path) else {
             return CmdResult::NeedPoint;
         };
+        self.options.path_pick = pt.is_finite().then_some(pt);
         if (self.options.scale - 1.0).abs() > 1e-12 {
             if let Some(message) = crate::scene::model::sweep_model::scaled_sweep_path_refusal(&path) {
                 return CmdResult::ReportMeasurement(format!(

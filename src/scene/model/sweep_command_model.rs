@@ -112,7 +112,53 @@ pub fn sweep_selection_options(profiles: &[EntityType], mut options: SweepOption
     Some(options)
 }
 
+/// The path traversed the other way when it was picked nearer its end
+/// (measured in plan, as the reference measures the pick), else `None`.
+fn reversed_toward_pick(path: &EntityType, pick: glam::DVec3) -> Option<EntityType> {
+    let (start, end) = match path {
+        EntityType::Polyline3D(value) if !value.is_closed() => {
+            let p = |v: &codec::entities::Vertex3DPolyline| glam::DVec3::new(v.position.x, v.position.y, v.position.z);
+            (p(value.vertices.first()?), p(value.vertices.last()?))
+        }
+        EntityType::Spline(value) if !value.flags.closed => {
+            let points = if value.control_points.is_empty() { &value.fit_points } else { &value.control_points };
+            let p = |v: &codec::types::Vector3| glam::DVec3::new(v.x, v.y, v.z);
+            (p(points.first()?), p(points.last()?))
+        }
+        _ => {
+            let planar = crate::entities::curve::entity_curve(path)?;
+            if planar.curve.is_closed() { return None; }
+            let at = |t: f64| glam::DVec3::from_array(planar.plane.point_at(planar.curve.point_at(t)));
+            (at(0.0), at(1.0))
+        }
+    };
+    let flat = |p: glam::DVec3| p.truncate().distance(pick.truncate());
+    if flat(end) >= flat(start) { return None; }
+    match path {
+        // An arc has one direction; reversed it is a one-segment polyline.
+        EntityType::Arc(arc) => {
+            let mut polyline = codec::LwPolyline::new();
+            let sweep = (arc.end_angle - arc.start_angle).rem_euclid(std::f64::consts::TAU);
+            let at = |angle: f64| codec::types::Vector2::new(arc.center.x + arc.radius * angle.cos(), arc.center.y + arc.radius * angle.sin());
+            let mut first = codec::entities::LwVertex::new(at(arc.end_angle));
+            first.bulge = -(sweep / 4.0).tan();
+            polyline.vertices = vec![first, codec::entities::LwVertex::new(at(arc.start_angle))];
+            polyline.normal = arc.normal;
+            polyline.elevation = arc.center.z;
+            Some(EntityType::LwPolyline(polyline))
+        }
+        _ => crate::modules::draw::modify::reverse::ReverseCommand::reversed(path),
+    }
+}
+
 pub fn sweep_record(profile: &EntityType, path: &EntityType, options: SweepOptions) -> Option<SolidHistorySweep> {
+    // Placed from the picked end; the record keeps the original path, and
+    // the placed frame tells which end the sweep starts from.
+    if let Some(reversed) = options.path_pick.and_then(|pick| reversed_toward_pick(path, pick)) {
+        let mut record = sweep_record(profile, &reversed, SweepOptions { path_pick: None, ..options })?;
+        record.path_entity = Some(embedded_sweep_path(path)?);
+        return Some(record);
+    }
     let (sweep_entity, sweep_entity_transform) = embedded_sweep_profile(profile)?;
     let (plane, wires, _) = kernel::acis::sweep_profile_geometry(&sweep_entity, sweep_entity_transform).ok()?;
     let base_point = match options.base_point {
