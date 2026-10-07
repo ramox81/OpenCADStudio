@@ -904,6 +904,7 @@ mod delobj_tests {
             mode,
             options: crate::command::SweepOptions::default(),
             color: [1.0; 4],
+            expressions: [None, None],
         });
 
         let created = app.tabs[i]

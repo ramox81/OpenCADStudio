@@ -459,6 +459,7 @@ impl OpenCADStudio {
             mode,
             options,
             color: _,
+            expressions,
         } = result
         else {
             unreachable!("router only routes the matching variant");
@@ -501,6 +502,11 @@ impl OpenCADStudio {
             // reference does.
             let result = (|| -> Result<_, Option<u32>> {
                 let (path, options) = path.as_ref().zip(options).ok_or(None)?;
+                if sweep_model::spatial_profile(&profile).is_some() {
+                    let record = sweep_model::spatial_sweep_record(&profile, path, options)?;
+                    let body = kernel::acis::rebuild_sweep_with_mode(&record, true).map_err(|_| None)?;
+                    return Ok((body, record, true));
+                }
                 let mut record = sweep_model::sweep_record(&profile, path, options).ok_or(None)?;
                 record.flags_294_296[0] |= picked_base;
                 let (_, _, closed) = kernel::acis::sweep_profile_geometry(
@@ -533,7 +539,9 @@ impl OpenCADStudio {
                 continue;
             }
             let created = if surface {
-                self.add_surface_model(sweep_model::swept_surface_entity(&record), body)
+                let mut entity = sweep_model::swept_surface_entity(&record);
+                sweep_model::link_sweep_expressions(&mut entity, &expressions);
+                self.add_surface_model(entity, body)
             } else {
                 self.add_solid_model(
                     empty_solid3d(),

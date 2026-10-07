@@ -1625,6 +1625,8 @@ pub struct SweepCommand {
     end_length: f64,
     /// The drawing's named parameters, for Expression input.
     parameters: crate::scene::named_parameters::ParameterTable,
+    /// The scale and twist expressions entered, if any.
+    expressions: [Option<String>; 2],
     isolines: usize,
     color: [f32; 4],
 }
@@ -1667,6 +1669,7 @@ impl SweepCommand {
             new_length_start: None,
             end_length: 1.0,
             parameters: Default::default(),
+            expressions: [None, None],
             isolines,
             color,
         }
@@ -1720,6 +1723,7 @@ impl SweepCommand {
             mode: self.mode,
             options: self.options,
             color: self.color,
+            expressions: self.expressions.clone(),
         }
     }
 
@@ -1944,6 +1948,7 @@ impl CadCommand for SweepCommand {
                     self.new_length_start = None;
                     self.step = SweepStep::ReferenceLength;
                 } else if let Ok(scale) = value.parse::<f64>() {
+                    self.expressions[0] = None;
                     self.set_scale(scale);
                 }
             }
@@ -1967,6 +1972,8 @@ impl CadCommand for SweepCommand {
                         "The syntax is incorrect or a variable is not defined.  Reenter the expression or value."
                     ).into_owned()));
                 };
+                let slot = if self.step == SweepStep::ScaleExpression { 0 } else { 1 };
+                self.expressions[slot] = Some(text.trim().to_string());
                 if self.step == SweepStep::ScaleExpression {
                     self.set_scale(value);
                 } else {
@@ -1986,6 +1993,7 @@ impl CadCommand for SweepCommand {
                 } else if let Some(angle) = crate::entities::common::parse_angle(value) {
                     if angle.is_finite() {
                         self.options.twist_angle = angle;
+                        self.expressions[1] = None;
                         self.options.bank = false;
                         SWEEP_BANK.store(false, std::sync::atomic::Ordering::Relaxed);
                         self.step = SweepStep::PickPath;

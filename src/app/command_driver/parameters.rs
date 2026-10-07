@@ -448,6 +448,7 @@ impl OpenCADStudio {
     /// table, so unlike that whole-table Apply this can cheaply scope the
     /// re-solve to just the entities that actually reference it.
     fn resolve_named_parameter_edit(&mut self, i: usize, name: &str) {
+        self.tabs[i].scene.refresh_expression_sweeps();
         let readers: Vec<&crate::scene::parametric_constraints::ParametricConstraint> = self
             .tabs[i]
             .scene

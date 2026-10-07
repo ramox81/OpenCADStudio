@@ -1020,6 +1020,89 @@ impl Scene {
         }
     }
 
+    /// Swept surfaces linked to scale/twist expressions follow the named
+    /// parameters: re-evaluated and rebuilt when a value changes, as the
+    /// reference keeps them associative. Returns the surfaces rebuilt.
+    pub fn refresh_expression_sweeps(&mut self) -> Vec<Handle> {
+        use crate::scene::model::sweep_model;
+        let linked = self.document.entities()
+            .filter_map(|entity| Some((entity.common().handle, sweep_model::sweep_expressions(entity)?)))
+            .collect::<Vec<_>>();
+        let mut rebuilt = Vec::new();
+        for (handle, [scale, twist]) in linked {
+            let Some(entity) = self.document.get_entity(handle) else { continue };
+            let Some(mut record) = sweep_model::surface_sweep_record(entity) else { continue };
+            let evaluate = |expression: &str| {
+                let mut table = self.named_parameters().clone();
+                table.set("sweepExpression", expression).ok()?;
+                table.resolve("sweepExpression").ok().filter(|value| value.is_finite())
+            };
+            let mut changed = false;
+            if let Some(value) = scale.as_deref().and_then(evaluate) {
+                changed |= (record.scale_factor - value).abs() > 1e-12;
+                record.scale_factor = value;
+            }
+            if let Some(value) = twist.as_deref().and_then(evaluate).map(f64::to_radians) {
+                changed |= (record.twist_angle - value).abs() > 1e-12;
+                record.twist_angle = value;
+            }
+            if !changed { continue; }
+            let Ok(body) = kernel::acis::rebuild_sweep_with_mode(&record, true) else { continue };
+            let Some(document) = crate::scene::convert::acis_export::solid_to_sat(&body) else { continue };
+            let Some(display) = self.prepare_solid_model_display(handle, &body) else { continue };
+            let before = self.document.get_entity(handle).cloned().map(std::sync::Arc::new);
+            self.record_undo_before(handle, before);
+            if let Some(EntityType::Surface(surface)) = self.document.get_entity_mut(handle) {
+                surface.acis_data = codec::entities::AcisData::from_sat(&document.to_sat_string());
+                if let codec::entities::SurfaceData::Swept { options, .. } = &mut surface.surface_data {
+                    options.scale_factor = record.scale_factor;
+                    options.twist_angle = record.twist_angle;
+                }
+            }
+            self.register_prepared_solid_model(handle, body, display);
+            rebuilt.push(handle);
+        }
+        rebuilt
+    }
+
+    /// Swept surfaces the reference keeps associative to a scale or twist
+    /// expression (an associative swept surface action whose value parameter
+    /// depends on an expression variable) are linked the same way here.
+    pub(crate) fn import_sweep_expression_links(&mut self) {
+        use codec::objects::{AssocSurfaceActionKind, AssociativeData, ObjectType};
+        let object = |handle: Handle| match self.document.objects.get(&handle) {
+            Some(ObjectType::Associative(object)) => Some(&object.data),
+            _ => None,
+        };
+        let mut links = Vec::new();
+        for item in self.document.objects.values() {
+            let ObjectType::Associative(action) = item else { continue };
+            let AssociativeData::Action(action) = &action.data else { continue };
+            let Some(AssociativeData::SurfaceActionBody(body)) = object(action.action_body) else { continue };
+            if body.kind != AssocSurfaceActionKind::Swept { continue; }
+            let Some(AssociativeData::Dependency(written)) = object(body.surface_body.dependency) else { continue };
+            let mut expressions: [Option<String>; 2] = [None, None];
+            for value in &action.values {
+                let slot = match value.name.as_str() { "ScaleFactor" => 0, "TwistAngle" => 1, _ => continue };
+                for variable in &value.variables {
+                    let Some(AssociativeData::ValueDependency(dependency)) = object(variable.handle) else { continue };
+                    let Some(AssociativeData::Variable(source)) = object(dependency.dependency.dependent_on) else { continue };
+                    if !source.expression.trim().is_empty() && source.expression.trim().parse::<f64>().is_err() {
+                        expressions[slot] = Some(source.expression.trim().to_string());
+                    }
+                }
+            }
+            if expressions.iter().any(Option::is_some) {
+                links.push((written.dependent_on, expressions));
+            }
+        }
+        for (handle, expressions) in links {
+            let Some(entity) = self.document.get_entity_mut(handle) else { continue };
+            if crate::scene::model::sweep_model::sweep_expressions(entity).is_some() { continue; }
+            crate::scene::model::sweep_model::link_sweep_expressions(entity, &expressions);
+        }
+    }
+
     pub fn rebuild_solid_history(
         &mut self,
         handle: Handle,
