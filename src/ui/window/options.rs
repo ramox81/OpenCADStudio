@@ -59,6 +59,8 @@ pub struct AppPrefs {
     pub commandline_fade_ms: i32,
     /// ZOOMWHEEL: reverse the mouse-wheel zoom direction.
     pub zoom_wheel_reversed: bool,
+    /// Scroll pans and Ctrl+scroll zooms (touchpads).
+    pub touchpad_pan: bool,
     /// ZOOMFACTOR. The slider sets the range the system variable has; the
     /// field beside it reaches `settings::ZOOM_FACTOR_MAX`.
     pub zoom_factor: i32,
@@ -1251,6 +1253,15 @@ pub fn view_window<'a>(
                 .on_toggle(Message::ZoomWheelReversedChanged)
                 .size(15),
             text(crate::t!("Reverse mouse wheel zoom (ZOOMWHEEL)")).size(12),
+        ]
+        .spacing(8)
+        .align_y(iced::Center),
+        Space::new().height(8),
+        row![
+            iced::widget::checkbox(prefs.touchpad_pan)
+                .on_toggle(Message::TouchpadPanChanged)
+                .size(15),
+            text(crate::t!("Touchpad: scroll pans, Ctrl+scroll or pinch zooms")).size(12),
         ]
         .spacing(8)
         .align_y(iced::Center),

@@ -2386,6 +2386,8 @@ pub struct Scene {
     /// Conservative association hint: unknown until scanned, then updated from
     /// changed entities. Retaining `true` after deletion only costs an extra scan.
     has_associative_centers: std::cell::Cell<Option<bool>>,
+    /// Conservative hint for whether any Underlay entities exist in the document.
+    pub(crate) has_underlays: std::cell::Cell<Option<bool>>,
     /// Conservative hint for whether any Face3D entities exist in the document.
     pub(crate) has_face3d: std::cell::Cell<Option<bool>>,
     /// Cached resolved document render environment (fog and background image), keyed by (geometry_epoch, document.objects.len()).
@@ -2783,6 +2785,7 @@ impl Scene {
             glyph_cache: RefCell::new(None),
             named_parameters: named_parameters::ParameterTable::new(),
             has_associative_centers: std::cell::Cell::new(None),
+            has_underlays: std::cell::Cell::new(None),
             has_face3d: std::cell::Cell::new(None),
             document_render_env_cache: RefCell::new(None),
             background_image_cache: RefCell::new(HashMap::default()),
@@ -2863,6 +2866,9 @@ impl Scene {
     /// The view has moved to another scale step than the underlay rasters
     /// were made for (frames are requested until they are made again).
     pub fn underlay_resolution_stale(&self) -> bool {
+        if !self.has_underlays() {
+            return false;
+        }
         let Some(wpp) = self.world_per_pixel() else {
             return false;
         };
@@ -3406,6 +3412,19 @@ impl Scene {
         any
     }
 
+    /// Fast check for whether any Underlay entities exist in the document.
+    pub(crate) fn has_underlays(&self) -> bool {
+        if let Some(known) = self.has_underlays.get() {
+            return known;
+        }
+        let any = self
+            .document
+            .entities()
+            .any(|e| matches!(e, EntityType::Underlay(_)));
+        self.has_underlays.set(Some(any));
+        any
+    }
+
     /// Fast check for whether any Face3D entities exist in the document.
     pub(crate) fn has_face3d(&self) -> bool {
         if let Some(known) = self.has_face3d.get() {
@@ -3823,6 +3842,7 @@ impl Scene {
         self.lighting_cache.borrow_mut().clear();
         *self.document_render_env_cache.borrow_mut() = None;
         self.background_image_cache.borrow_mut().clear();
+        self.has_underlays.set(None);
         self.has_face3d.set(None);
         // Default: also invalidate block definitions. Safe for every caller;
         // operations that know blocks are untouched use `bump_geometry_no_blocks`.

@@ -530,7 +530,9 @@ impl OpenCADStudio {
             }
         }
         if let Some(started) = perf_started {
-            let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
+            let elapsed_us = started.elapsed().as_micros() as u64;
+            crate::perf::note_update_time(elapsed_us);
+            let elapsed_ms = elapsed_us as f64 / 1000.0;
             if elapsed_ms >= 5.0 {
                 crate::perf_record!("[perf] update {:>7.1}ms message={perf_label}", elapsed_ms,);
             }
@@ -8379,6 +8381,12 @@ impl OpenCADStudio {
 
             Message::ZoomWheelReversedChanged(reversed) => {
                 self.zoom_wheel_reversed = reversed;
+                self.persist_settings_if_changed();
+                Task::none()
+            }
+
+            Message::TouchpadPanChanged(enabled) => {
+                self.touchpad_pan = enabled;
                 self.persist_settings_if_changed();
                 Task::none()
             }

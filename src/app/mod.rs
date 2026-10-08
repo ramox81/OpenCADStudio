@@ -559,6 +559,8 @@ pub(super) struct OpenCADStudio {
     polar_increment_deg: f32,
     /// Reverse the mouse-wheel zoom direction when true (ZOOMWHEEL = 1).
     zoom_wheel_reversed: bool,
+    /// Scroll pans and Ctrl+scroll zooms (touchpads); see `scroll_intent`.
+    touchpad_pan: bool,
     /// Mouse-wheel zoom sensitivity (ZOOMFACTOR), held inside
     /// `settings::ZOOM_FACTOR_MIN..=settings::ZOOM_FACTOR_MAX`. `SETVAR`
     /// only sets the range the system variable itself has; the Options
@@ -2375,6 +2377,7 @@ pub enum Message {
     CommandLineFadeChanged(i32),
     /// Toggle reversing the mouse-wheel zoom direction (ZOOMWHEEL).
     ZoomWheelReversedChanged(bool),
+    TouchpadPanChanged(bool),
     /// Change how far one wheel notch zooms, from the Options slider
     /// (ZOOMFACTOR).
     ZoomFactorChanged(i32),
@@ -4157,6 +4160,7 @@ impl OpenCADStudio {
             polar_mode: false,
             polar_increment_deg: 45.0,
             zoom_wheel_reversed: false,
+            touchpad_pan: false,
             zoom_factor: 60,
             zoom_factor_input: 60.to_string(),
             cursor_size: 5,

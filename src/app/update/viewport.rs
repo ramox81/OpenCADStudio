@@ -42,9 +42,6 @@ enum ScrollIntent {
     Zoom { notches: f32 },
     /// Trackpad movement to pan by, in screen pixels.
     ///
-    /// Built only where a pixel delta can only mean a trackpad, so it has no
-    /// constructor on the other targets.
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     Pan { dx: f32, dy: f32 },
 }
 
@@ -55,11 +52,22 @@ const ZOOM_DIR_FLIP_PX: f32 = 2.0;
 
 /// A wheel notch zooms; a trackpad's two fingers pan.
 ///
-/// A wheel reports notches, a precise-scrolling device reports pixels, and that
-/// is the whole distinction — there is no modifier to check and no setting to
-/// read. The pixels only mean "trackpad" on macOS: the browser build reports
-/// every wheel notch as pixels too, so everywhere else they keep zooming.
-fn scroll_intent(delta: mouse::ScrollDelta) -> ScrollIntent {
+/// On macOS a wheel reports notches and a trackpad pixels, and that is the
+/// whole distinction. Elsewhere a touchpad's two-finger drag arrives as wheel
+/// notches (the browser build reports every wheel as pixels), so nothing tells
+/// it from a wheel: with `touchpad_pan` on, every scroll pans and Ctrl+scroll —
+/// what a pinch sends there — zooms.
+fn scroll_intent(delta: mouse::ScrollDelta, touchpad_pan: bool, ctrl: bool) -> ScrollIntent {
+    /// Screen pixels one wheel line pans.
+    const LINE_PX: f32 = 40.0;
+    if touchpad_pan && !ctrl {
+        return match delta {
+            mouse::ScrollDelta::Pixels { x, y } => ScrollIntent::Pan { dx: x, dy: y },
+            mouse::ScrollDelta::Lines { x, y } => {
+                ScrollIntent::Pan { dx: x * LINE_PX, dy: y * LINE_PX }
+            }
+        };
+    }
     match delta {
         // Both axes go straight through: the two-finger gesture moves the
         // drawing the same way the middle-button drag moves it. If a pan ever
@@ -1193,6 +1201,7 @@ impl OpenCADStudio {
     }
 
     pub(in crate::app) fn on_viewport_move(&mut self, p: Point) -> Task<Message> {
+        crate::perf::note_pointer_move();
         // A ribbon dropdown is open over the viewport. Its backdrop
         // cannot swallow cursor motion — in iced 0.14 mouse_area/opaque
         // capture only button presses, never CursorMoved — so the move
@@ -5673,8 +5682,9 @@ properties={:.1}ms picked={}",
     /// A wheel notch zooms; a trackpad's two fingers pan. Which one a delta
     /// means is `scroll_intent`'s call.
     pub(super) fn on_viewport_scroll(&mut self, delta: mouse::ScrollDelta) -> Task<Message> {
-        match scroll_intent(delta) {
+        match scroll_intent(delta, self.touchpad_pan, self.ctrl_down) {
             ScrollIntent::Zoom { notches } => {
+                crate::perf::note_scroll_zoom();
                 let mut s =
                     notches * crate::app::settings::zoom_notch_steps(self.zoom_factor);
                 if self.zoom_wheel_reversed {
@@ -6701,10 +6711,24 @@ mod scroll_intent_tests {
     use crate::scene::view::camera::Camera;
     use iced::mouse::ScrollDelta;
 
+    /// With the touchpad option, a scroll pans (wheel lines as pixels) and
+    /// Ctrl+scroll — a pinch — still zooms.
+    #[test]
+    fn touchpad_pan_scrolls_pan_and_ctrl_zooms() {
+        assert_eq!(
+            scroll_intent(ScrollDelta::Lines { x: 0.5, y: -0.25 }, true, false),
+            ScrollIntent::Pan { dx: 20.0, dy: -10.0 }
+        );
+        assert_eq!(
+            scroll_intent(ScrollDelta::Lines { x: 0.0, y: 1.0 }, true, true),
+            ScrollIntent::Zoom { notches: 1.0 }
+        );
+    }
+
     #[test]
     fn wheel_notches_zoom() {
         assert_eq!(
-            scroll_intent(ScrollDelta::Lines { x: 0.0, y: 1.0 }),
+            scroll_intent(ScrollDelta::Lines { x: 0.0, y: 1.0 }, false, false),
             ScrollIntent::Zoom { notches: 1.0 }
         );
     }
@@ -6715,7 +6739,7 @@ mod scroll_intent_tests {
     #[test]
     fn two_finger_scroll_pans() {
         assert_eq!(
-            scroll_intent(ScrollDelta::Pixels { x: 4.0, y: 6.0 }),
+            scroll_intent(ScrollDelta::Pixels { x: 4.0, y: 6.0 }, false, false),
             ScrollIntent::Pan { dx: 4.0, dy: 6.0 }
         );
     }

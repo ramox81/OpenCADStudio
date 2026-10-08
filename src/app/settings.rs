@@ -388,6 +388,9 @@ pub struct UserSettings {
     pub polar: bool,
     pub polar_increment_deg: f32,
     pub zoom_wheel_reversed: bool,
+    /// Scrolling pans and Ctrl+scroll (a touchpad pinch) zooms, for a
+    /// touchpad that reports two-finger drags as wheel scrolls.
+    pub touchpad_pan: bool,
     pub zoom_factor: i32,
     /// CURSORSIZE: normalized crosshair reach; 5 retains the original 60 px arms.
     pub cursor_size: i32,
@@ -807,6 +810,7 @@ impl Default for UserSettings {
             polar: false,
             polar_increment_deg: 45.0,
             zoom_wheel_reversed: false,
+            touchpad_pan: false,
             zoom_factor: 60,
             cursor_size: 5,
             pick_box: 3,
