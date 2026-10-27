@@ -3321,6 +3321,10 @@ pub trait CadCommand: Send {
         vec![]
     }
 
+    /// The view's world units per screen pixel, given before the preview
+    /// wires are asked for, for markers drawn at a fixed screen size.
+    fn set_world_per_pixel(&mut self, _world_per_pixel: f64) {}
+
     /// Every change the command makes while it runs is one undo step: the
     /// message boundary leaves its history transaction open.
     fn groups_undo(&self) -> bool {

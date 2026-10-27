@@ -42,7 +42,13 @@ pub struct DimReassociateCommand {
     /// "Select object" / "Select arc or circle" was chosen at the first prompt.
     select_object: bool,
     picked: Option<EntityType>,
+    /// World units per screen pixel of the view, so the X keeps one screen
+    /// size; 0 when unknown.
+    world_per_pixel: f64,
 }
+
+/// Half the X across, in screen pixels.
+const X_HALF_PX: f64 = 13.2;
 
 impl DimReassociateCommand {
     pub fn new(items: Vec<(Handle, ReassociateKind)>, points: Vec<Vec<DVec3>>) -> Self {
@@ -53,6 +59,7 @@ impl DimReassociateCommand {
             step: 0,
             select_object: false,
             picked: None,
+            world_per_pixel: 0.0,
         }
     }
 
@@ -102,6 +109,10 @@ impl CadCommand for DimReassociateCommand {
         true
     }
 
+    fn set_world_per_pixel(&mut self, world_per_pixel: f64) {
+        self.world_per_pixel = world_per_pixel;
+    }
+
     fn on_preview_wires(&mut self, _pt: DVec3) -> Vec<WireModel> {
         self.persistent_preview_wires()
     }
@@ -117,13 +128,17 @@ impl CadCommand for DimReassociateCommand {
         let Some(&at) = points.get(self.step) else {
             return Vec::new();
         };
-        // A twentieth of the dimension's own extent, so the X reads at the
-        // scale the dimension is drawn.
-        let extent = points
-            .iter()
-            .flat_map(|a| points.iter().map(move |b| a.distance(*b)))
-            .fold(0.0_f64, f64::max);
-        let half = (extent / 20.0).max(1.0e-6);
+        // A fixed screen size; without a view scale, a twentieth of the
+        // dimension's own extent.
+        let half = if self.world_per_pixel > 0.0 {
+            X_HALF_PX * self.world_per_pixel
+        } else {
+            let extent = points
+                .iter()
+                .flat_map(|a| points.iter().map(move |b| a.distance(*b)))
+                .fold(0.0_f64, f64::max);
+            (extent / 20.0).max(1.0e-6)
+        };
         let corner = |dx: f64, dy: f64| [at.x + dx * half, at.y + dy * half, at.z];
         vec![WireModel::solid_f64(
             "dimreassociate_x".into(),
@@ -134,7 +149,7 @@ impl CadCommand for DimReassociateCommand {
                 corner(-1.0, 1.0),
                 corner(1.0, -1.0),
             ],
-            WireModel::WHITE,
+            [4.0 / 255.0, 116.0 / 255.0, 230.0 / 255.0, 1.0],
             false,
         )]
     }

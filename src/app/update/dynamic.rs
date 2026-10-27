@@ -838,6 +838,9 @@ impl OpenCADStudio {
             tab.active_cmd
                 .as_mut()
                 .map(|c| {
+                    if let Some(world_per_pixel) = tab.scene.world_per_pixel() {
+                        c.set_world_per_pixel(f64::from(world_per_pixel));
+                    }
                     let mut wires = c.on_preview_wires(cur);
                     wires.extend(c.persistent_preview_wires());
                     let entities = c.preview_entities(&tab.scene.document, cur);
