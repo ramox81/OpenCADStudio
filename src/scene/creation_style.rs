@@ -49,6 +49,9 @@ pub fn ensure_iso_dim_style(doc: &mut Document) -> Handle {
     }
     let mut style = DimStyle::new("ISO-25");
     style.handle = doc.allocate_handle();
+    // Separate arrowheads off, as in the reference's ISO-25: DIMBLK draws
+    // both ends.
+    style.dimsah = false;
     style.dimtxt = 2.5;
     style.dimasz = 2.5;
     style.dimcen = 2.5;
