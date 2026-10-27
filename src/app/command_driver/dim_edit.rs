@@ -501,7 +501,7 @@ pub(super) fn overlapping_dimensions(scene: &crate::scene::Scene, new: Handle) -
 /// DIM's answer to an overlap: Move away steps the overlapped dimensions one
 /// DIMDLI towards what they measure, Break up breaks them where the new one
 /// crosses, Replace erases them, None leaves them.
-pub(crate) fn apply_dim_overlap(
+pub(super) fn apply_dim_overlap(
     scene: &mut crate::scene::Scene,
     choice: char,
     new: Handle,
@@ -563,24 +563,85 @@ pub(crate) fn apply_dim_overlap(
                 scene.bump_entities(&changes);
             }
         }
-        'B' => {
-            let result = apply_dimbreak(
-                scene,
-                others,
-                crate::command::DimensionBreakOperation::Object(new),
-            );
-            for handle in &result.changed {
-                scene.invalidate_dim_block_recorded(*handle);
-            }
-            let changes: Vec<_> = result
-                .changed
-                .iter()
-                .map(|handle| (*handle, crate::scene::ChangeKind::Modified))
-                .collect();
-            scene.bump_entities(&changes);
-        }
+        'B' => break_up_dimensions(scene, new, others),
         'R' => scene.erase_entities(others),
         _ => {}
+    }
+}
+
+/// Break up: `new` and the dimensions it lies over become a chain on the same
+/// dimension line, split at every extension line origin of them all. Each
+/// piece is a new dimension made like `new`; the originals are erased.
+fn break_up_dimensions(scene: &mut crate::scene::Scene, new: Handle, others: &[Handle]) {
+    use codec::entities::Dimension;
+    use codec::types::Vector3;
+    let Some((axis, _, definition)) = spacing_axis(scene, new) else {
+        return;
+    };
+    let length = axis[0].hypot(axis[1]);
+    let Some(template) = scene.document.get_entity(new).cloned() else {
+        return;
+    };
+    if length <= 0.0 {
+        return;
+    }
+    let u = [axis[0] / length, axis[1] / length];
+    let along = |p: Vector3| p.x * u[0] + p.y * u[1];
+    let mut points: Vec<Vector3> = std::iter::once(new)
+        .chain(others.iter().copied())
+        .filter_map(|handle| {
+            match scene
+                .document
+                .get_entity(handle)
+                .and_then(crate::entities::dimension::as_dimension)?
+            {
+                Dimension::Linear(d) => Some([d.first_point, d.second_point]),
+                Dimension::Aligned(d) => Some([d.first_point, d.second_point]),
+                _ => None,
+            }
+        })
+        .flatten()
+        .collect();
+    points.sort_by(|a, b| along(*a).total_cmp(&along(*b)));
+    let tolerance = match (points.first(), points.last()) {
+        (Some(a), Some(b)) => (along(*b) - along(*a)).abs().max(1.0) * 1.0e-9,
+        _ => return,
+    };
+    points.dedup_by(|b, a| (along(*b) - along(*a)).abs() <= tolerance);
+    let line = definition[0] * u[0] + definition[1] * u[1];
+    let mut pieces = Vec::new();
+    for pair in points.windows(2) {
+        let mut entity = template.clone();
+        let Some(dimension) = crate::entities::dimension::as_dimension_mut(&mut entity) else {
+            continue;
+        };
+        // On the dimension line, across from the piece's second point.
+        let shift = along(pair[1]) - line;
+        let at = Vector3::new(
+            definition[0] + shift * u[0],
+            definition[1] + shift * u[1],
+            definition[2],
+        );
+        match dimension {
+            Dimension::Linear(d) => {
+                (d.first_point, d.second_point, d.definition_point) = (pair[0], pair[1], at);
+            }
+            Dimension::Aligned(d) => {
+                (d.first_point, d.second_point, d.definition_point) = (pair[0], pair[1], at);
+            }
+            _ => continue,
+        }
+        crate::entities::dimension::normalize_scripted_dimension(dimension);
+        let base = dimension.base_mut();
+        base.text_user_positioned = false;
+        base.block_name.clear();
+        pieces.push(entity);
+    }
+    let mut erased = vec![new];
+    erased.extend_from_slice(others);
+    scene.erase_entities(&erased);
+    for piece in pieces {
+        scene.add_entity_clone(piece);
     }
 }
 

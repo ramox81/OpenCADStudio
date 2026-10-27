@@ -333,24 +333,18 @@ pub fn sync_header_dim_vars(doc: &mut Document) {
     }
 }
 
-/// The drawing's DIMDLI. Drawings saved before the header followed the
-/// current style kept the imperial 0.38 in a metric drawing; that value is
-/// read as the current style's.
+/// The drawing's DIMDLI (the header's; the current style's when the header
+/// has none).
 pub fn drawing_dimdli(doc: &Document) -> f64 {
-    let current = doc.header.current_dimstyle_name.clone();
-    let style = doc
-        .dim_styles
-        .iter()
-        .find(|style| style.name.eq_ignore_ascii_case(&current))
-        .map(|style| style.dimdli);
     let header = doc.header.dim_line_increment;
-    // ponytail: an exact 0.38 in a metric drawing is taken as never synced;
-    // a metric drawing really set to 0.38 by DIM's Offset reads as the style's.
-    let unsynced = (header - 0.38).abs() < 1.0e-12 && doc.header.measurement == 1;
-    match style {
-        Some(value) if unsynced || header <= 0.0 => value,
-        _ => header,
+    if header > 0.0 {
+        return header;
     }
+    let current = &doc.header.current_dimstyle_name;
+    doc.dim_styles
+        .iter()
+        .find(|style| style.name.eq_ignore_ascii_case(current))
+        .map_or(header, |style| style.dimdli)
 }
 
 /// A DIMDLI set for the drawing that differs from the dimension's own

@@ -467,25 +467,28 @@ impl OpenCADStudio {
             self.commit_undo_delta(i, pd);
         }
         // A dimension DIM placed over another asks what to do with them.
-        let at_dim_prompt = self.tabs[i]
+        let in_dim = self.tabs[i]
             .active_cmd
             .as_ref()
-            .is_some_and(|command| command.name() == "DIM" && command.at_main_prompt());
-        if let (true, Some(handle)) = (continue_command && at_dim_prompt, committed) {
+            .is_some_and(|command| command.name() == "DIM");
+        if let (true, Some(handle)) = (continue_command && in_dim, committed) {
             let overlapped = super::dim_edit::overlapping_dimensions(
                 &self.tabs[i].scene,
                 handle,
             );
             if !overlapped.is_empty() {
-                return Some(self.dispatch_command(&format!(
-                    "_DIM_OVERLAP_ASK {} {}",
-                    handle.value(),
-                    overlapped
-                        .iter()
-                        .map(|handle| handle.value().to_string())
-                        .collect::<Vec<_>>()
-                        .join(",")
-                )));
+                let asked = self.tabs[i]
+                    .active_cmd
+                    .as_mut()
+                    .is_some_and(|command| command.ask_dim_overlap(handle, overlapped));
+                if asked {
+                    if let Some(command) = self.tabs[i].active_cmd.as_ref() {
+                        let (prompt, options) = (command.prompt(), command.options());
+                        self.command_line.push_info(&prompt);
+                        self.command_line.set_step_options(options);
+                    }
+                    return None;
+                }
             }
         }
         if continue_command {

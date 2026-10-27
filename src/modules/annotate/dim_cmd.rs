@@ -49,8 +49,10 @@ enum Kind {
     ArcLength,
     Angular,
     Ordinate,
-    /// A baseline or continued series run from DIM's options.
+    /// A baseline series run from DIM's options.
     Series,
+    /// A continued series run from DIM's options.
+    Continued,
 }
 
 pub struct DimCommand {
@@ -68,12 +70,25 @@ pub struct DimCommand {
     /// The object picked at the Layer prompt, whose layer is taken.
     layer_pick: Option<EntityType>,
     /// The dimension just placed and the ones it lies over, while DIM asks
-    /// what to do with them.
-    overlap: Option<(Handle, Vec<Handle>)>,
+    /// what to do with them; `true` in a continued series, which offers only
+    /// Break up and None.
+    overlap: Option<(Handle, Vec<Handle>, bool)>,
 }
 
-/// The overlap answer chosen last ('M', 'B', 'R' or 'N'), the next default.
+/// The next default at DIM's own overlap question ('M', 'R' or 'N'; Break
+/// up is not kept, Move away comes back after it). Kept for the session.
 static OVERLAP_DEFAULT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(b'M');
+/// The continued series' answer chosen last ('B' or 'N').
+static CONTINUE_OVERLAP_DEFAULT: std::sync::atomic::AtomicU8 =
+    std::sync::atomic::AtomicU8::new(b'B');
+
+fn overlap_default(continued: bool) -> u8 {
+    if continued {
+        CONTINUE_OVERLAP_DEFAULT.load(std::sync::atomic::Ordering::Relaxed)
+    } else {
+        OVERLAP_DEFAULT.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
 
 impl DimCommand {
     pub fn new(current_layer: String) -> Self {
@@ -90,19 +105,16 @@ impl DimCommand {
         }
     }
 
-    /// DIM asking how to handle the dimensions `new` was placed over.
-    pub fn at_overlap(current_layer: String, new: Handle, others: Vec<Handle>) -> Self {
-        Self {
-            overlap: Some((new, others)),
-            ..Self::new(current_layer)
-        }
-    }
-
     fn answer_overlap(&mut self, choice: u8) -> CmdResult {
-        let Some((new, others)) = self.overlap.take() else {
+        let Some((new, others, continued)) = self.overlap.take() else {
             return CmdResult::NeedPoint;
         };
-        OVERLAP_DEFAULT.store(choice, std::sync::atomic::Ordering::Relaxed);
+        if continued {
+            CONTINUE_OVERLAP_DEFAULT.store(choice, std::sync::atomic::Ordering::Relaxed);
+        } else {
+            let next = if choice == b'B' { b'M' } else { choice };
+            OVERLAP_DEFAULT.store(next, std::sync::atomic::Ordering::Relaxed);
+        }
         CmdResult::Dispatch(format!(
             "_DIM_OVERLAP {} {} {}",
             choice as char,
@@ -125,8 +137,9 @@ impl DimCommand {
 
     /// DIM running a command it handed off (the Baseline and Continue
     /// series); Enter at that command's first prompt comes back to DIM.
-    pub fn adopt(&mut self, command: Box<dyn CadCommand>) {
-        self.inner = Some((Kind::Series, command));
+    pub fn adopt(&mut self, command: Box<dyn CadCommand>, continued: bool) {
+        let kind = if continued { Kind::Continued } else { Kind::Series };
+        self.inner = Some((kind, command));
     }
 
     fn start(&mut self, kind: Kind) -> &mut Box<dyn CadCommand> {
@@ -138,7 +151,7 @@ impl DimCommand {
             Kind::ArcLength => Box::new(ArcLengthDimensionCommand::new()),
             Kind::Angular => Box::new(AngularDimensionCommand::new()),
             Kind::Ordinate => Box::new(OrdinateDimCommand::new()),
-            Kind::Series => unreachable!("a series is adopted, not started"),
+            Kind::Series | Kind::Continued => unreachable!("a series is adopted, not started"),
         };
         command.set_working_plane(self.plane);
         &mut self.inner.insert((kind, command)).1
@@ -230,19 +243,29 @@ impl CadCommand for DimCommand {
         }
     }
 
-    fn at_main_prompt(&self) -> bool {
-        self.inner.is_none() && !self.layer && self.overlap.is_none()
+    fn ask_dim_overlap(&mut self, new: Handle, others: Vec<Handle>) -> bool {
+        let continued = match &self.inner {
+            None if !self.layer && self.overlap.is_none() => false,
+            Some((Kind::Continued, _)) => true,
+            _ => return false,
+        };
+        self.overlap = Some((new, others, continued));
+        true
     }
 
     fn prompt(&self) -> String {
-        if self.overlap.is_some() {
-            let default = match OVERLAP_DEFAULT.load(std::sync::atomic::Ordering::Relaxed) {
+        if let Some((_, _, continued)) = &self.overlap {
+            let default = match overlap_default(*continued) {
                 b'B' => "Break up",
                 b'R' => "Replace",
                 b'N' => "None",
                 _ => "Move away",
             };
-            return crate::tr!("dim-cmd", "overlap", default = default);
+            return if *continued {
+                crate::tr!("dim-cmd", "overlap-continue", default = default)
+            } else {
+                crate::tr!("dim-cmd", "overlap", default = default)
+            };
         }
         if self.layer {
             return crate::tr!("dim-cmd", "layer", current = self.current_layer.clone());
@@ -273,7 +296,10 @@ impl CadCommand for DimCommand {
     }
 
     fn options(&self) -> Vec<CmdOption> {
-        if self.overlap.is_some() {
+        if let Some((_, _, continued)) = &self.overlap {
+            if *continued {
+                return vec![CmdOption::new("Break up", "B"), CmdOption::new("None", "N")];
+            }
             return vec![
                 CmdOption::new("Move away", "M"),
                 CmdOption::new("Break up", "B"),
@@ -450,8 +476,8 @@ impl CadCommand for DimCommand {
     }
 
     fn on_enter(&mut self) -> CmdResult {
-        if self.overlap.is_some() {
-            let choice = OVERLAP_DEFAULT.load(std::sync::atomic::Ordering::Relaxed);
+        if let Some((_, _, continued)) = &self.overlap {
+            let choice = overlap_default(*continued);
             return self.answer_overlap(choice);
         }
         if self.layer {
@@ -480,12 +506,12 @@ impl CadCommand for DimCommand {
     }
 
     fn on_text_input(&mut self, text: &str) -> Option<CmdResult> {
-        if self.overlap.is_some() {
+        if let Some((_, _, continued)) = &self.overlap {
             let word = text.trim().trim_start_matches('_').to_ascii_uppercase();
             let choice = match word.as_str() {
-                "M" | "MOVE" | "MOVE AWAY" => b'M',
+                "M" | "MOVE" | "MOVE AWAY" if !*continued => b'M',
                 "B" | "BREAK" | "BREAK UP" => b'B',
-                "R" | "REPLACE" => b'R',
+                "R" | "REPLACE" if !*continued => b'R',
                 "N" | "NONE" => b'N',
                 _ => return None,
             };

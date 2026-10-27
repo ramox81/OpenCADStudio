@@ -132,13 +132,13 @@ impl OpenCADStudio {
                 self.dim_offset_settings(i);
                 let series = self.dim_baseline_command(i, true);
                 let mut command = DimCommand::new(self.dim_layer_label(i));
-                command.adopt(Box::new(series));
+                command.adopt(Box::new(series), false);
                 self.install_dim(i, command);
             }
             "DIM_CONTINUE" => {
                 let series = self.dim_continue_command(i, true);
                 let mut command = DimCommand::new(self.dim_layer_label(i));
-                command.adopt(Box::new(series));
+                command.adopt(Box::new(series), true);
                 self.install_dim(i, command);
             }
             "DIM_ALIGN" => {
@@ -154,50 +154,6 @@ impl OpenCADStudio {
                 self.command_line.push_info(&command.prompt());
                 self.command_line.set_step_options(command.options());
                 self.tabs[i].active_cmd = Some(Box::new(command));
-            }
-            // A dimension DIM placed over others: ask what to do with them.
-            "DIM_OVERLAP_ASK" => {
-                let mut parts = rest.split_whitespace();
-                let new = parts.next().and_then(|v| v.parse::<u64>().ok()).map(codec::Handle::new);
-                let others: Vec<codec::Handle> = parts
-                    .next()
-                    .unwrap_or("")
-                    .split(',')
-                    .filter_map(|v| v.parse::<u64>().ok())
-                    .map(codec::Handle::new)
-                    .collect();
-                match new {
-                    Some(new) => {
-                        let command = DimCommand::at_overlap(self.dim_layer_label(i), new, others);
-                        self.install_dim(i, command);
-                    }
-                    None => self.start_dim(i),
-                }
-            }
-            "DIM_OVERLAP" => {
-                let mut parts = rest.split_whitespace();
-                let choice = parts.next().and_then(|v| v.chars().next()).unwrap_or('N');
-                let new = parts.next().and_then(|v| v.parse::<u64>().ok()).map(codec::Handle::new);
-                let others: Vec<codec::Handle> = parts
-                    .next()
-                    .unwrap_or("")
-                    .split(',')
-                    .filter_map(|v| v.parse::<u64>().ok())
-                    .map(codec::Handle::new)
-                    .collect();
-                if let (Some(new), false) = (new, others.is_empty() || choice == 'N') {
-                    let dimdli = self.current_dimdli(i);
-                    self.push_undo_snapshot(i, "DIM");
-                    crate::app::command_driver::apply_dim_overlap(
-                        &mut self.tabs[i].scene,
-                        choice,
-                        new,
-                        &others,
-                        dimdli,
-                    );
-                    self.tabs[i].dirty = true;
-                }
-                self.start_dim(i);
             }
             // Undo: the last dimension goes, DIM goes on.
             "DIM_UNDO" => {

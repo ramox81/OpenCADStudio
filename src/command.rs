@@ -3304,8 +3304,10 @@ pub trait CadCommand: Send {
         vec![]
     }
 
-    /// DIM is back at its own prompt (no dimension under way).
-    fn at_main_prompt(&self) -> bool {
+    /// DIM asks how to handle the dimensions `new` was placed over; false
+    /// when the command is at no step that asks (DIM asks at its own prompt
+    /// and in its continued series, not in a baseline series).
+    fn ask_dim_overlap(&mut self, _new: Handle, _others: Vec<Handle>) -> bool {
         false
     }
 

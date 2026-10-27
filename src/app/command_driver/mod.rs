@@ -83,7 +83,6 @@ use iced::Task;
 pub(super) mod clipboard;
 mod constraint;
 mod dim_edit;
-pub(crate) use dim_edit::apply_dim_overlap;
 mod entity_commit;
 mod modify;
 mod parameters;
@@ -1471,6 +1470,37 @@ impl OpenCADStudio {
         {
             self.tabs[i].scene.document.header.dim_line_increment = value;
             self.tabs[i].dirty = true;
+            if let Some(command) = self.tabs[i].active_cmd.as_ref() {
+                let (prompt, options) = (command.prompt(), command.options());
+                self.command_line.push_info(&prompt);
+                self.command_line.set_step_options(options);
+            }
+            return Task::none();
+        }
+        // DIM's answer about the dimensions it placed one over; DIM (or its
+        // continued series) goes on.
+        if let Some(rest) = cmd.strip_prefix("_DIM_OVERLAP ") {
+            let mut parts = rest.split_whitespace();
+            let choice = parts.next().and_then(|v| v.chars().next()).unwrap_or('N');
+            let new = parts
+                .next()
+                .and_then(|v| v.parse::<u64>().ok())
+                .map(codec::Handle::new);
+            let others: Vec<codec::Handle> = parts
+                .next()
+                .unwrap_or("")
+                .split(',')
+                .filter_map(|v| v.parse::<u64>().ok())
+                .map(codec::Handle::new)
+                .collect();
+            if let (Some(new), false) = (new, others.is_empty() || choice == 'N') {
+                let dimdli = crate::scene::creation_style::drawing_dimdli(
+                    &self.tabs[i].scene.document,
+                );
+                self.push_undo_snapshot(i, "DIM");
+                dim_edit::apply_dim_overlap(&mut self.tabs[i].scene, choice, new, &others, dimdli);
+                self.tabs[i].dirty = true;
+            }
             if let Some(command) = self.tabs[i].active_cmd.as_ref() {
                 let (prompt, options) = (command.prompt(), command.options());
                 self.command_line.push_info(&prompt);
