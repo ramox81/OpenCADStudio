@@ -289,11 +289,12 @@ pub fn view_settings<'a>(
     }
 
     // ── Origin ───────────────────────────────────────────────────────────
-    let origin = row![
+    // One field per line: side by side the labels leave the fields no room.
+    let origin = column![
         labelled("X".into(), input(&state.origin_x, kind >= 2, HatchDialogMsg::OriginX)),
         labelled("Y".into(), input(&state.origin_y, kind >= 2, HatchDialogMsg::OriginY)),
     ]
-    .spacing(12);
+    .spacing(8);
 
     // ── Boundaries ───────────────────────────────────────────────────────
     let boundaries = row![

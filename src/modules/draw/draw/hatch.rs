@@ -372,7 +372,8 @@ fn fill_pattern(fill: &HatchFill, angle_deg: f32) -> (String, HatchPattern) {
             kind.dxf_name(*invert).into(),
             HatchPattern::Gradient {
                 angle_deg,
-                color2: [0.18, 0.18, 0.18, 0.0],
+                // GFCLR2: the second colour of a two-colour gradient (yellow).
+                color2: [1.0, 1.0, 0.0, 0.0],
                 kind: *kind,
                 invert: *invert,
                 shift: 0.0,
@@ -1054,8 +1055,9 @@ impl HatchCommand {
                 family.y0 += ((-dx * sin + dy * cos) / scale as f64) as f32;
             }
         }
-        let color = if self.gradient {
-            [0.30, 0.60, 0.95, 0.80]
+        // GFCLR1 (blue) for a gradient fill, as the reference starts with.
+        let color = if self.gradient || matches!(self.fill, Some(HatchFill::Gradient(..))) {
+            [0.0, 0.0, 1.0, 0.80]
         } else {
             [0.75, 0.75, 0.75, 0.85]
         };
