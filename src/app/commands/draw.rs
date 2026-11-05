@@ -1190,7 +1190,6 @@ impl OpenCADStudio {
                     self.command_line.push_info(&cmd.prompt());
                     self.tabs[i].active_cmd = Some(Box::new(cmd));
                 } else {
-                    let n = handles.len();
                     let delta_safe = self.delta_erase_safe(i, &handles);
                     let pending = self.begin_undo(i, "ERASE", handles.len(), delta_safe);
                     // Stash the erased entities so OOPS can restore them.
@@ -1208,8 +1207,6 @@ impl OpenCADStudio {
                     self.tabs[i].scene.erase_entities(&handles);
                     self.tabs[i].dirty = true;
                     self.refresh_properties();
-                    self.command_line
-                        .push_output(crate::tf!("{n} object(s) erased.").as_ref());
                     if associative_hatch {
                         self.command_line
                             .push_output(&crate::tr!("hatch-cmd", "associativity-removed"));

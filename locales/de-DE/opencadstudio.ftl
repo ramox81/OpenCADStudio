@@ -3242,7 +3242,6 @@ draw =
     .x-ray = Röntgenstrahlen
     .xline-specify-a-point = XLINE Geben Sie einen Punkt an:
     .xline-specify-through-point = XLINE Geben Sie den Durchgangspunkt an:
-    .n-object-s-erased = __ocs_fmt_0__ Objekt(e) gelöscht.
 
     .circle-specify-diameter = CIRCLE  { common.specify }: { common.diameter } <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK  { draw.select }: { common.arc } / { common.circle } <{ common.finish }>

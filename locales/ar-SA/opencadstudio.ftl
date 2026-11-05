@@ -3254,7 +3254,6 @@ draw =
     .x-ray = أشعة سينية
     .xline-specify-a-point = XLINE  حدد نقطة:
     .xline-specify-through-point = XLINE  حدد نقطة العبور:
-    .n-object-s-erased = مُسح __ocs_fmt_0__ كائن.
 
     .circle-specify-diameter = CIRCLE  { common.specify }: { common.diameter } <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK  { draw.select }: { common.arc } / { common.circle } <{ common.finish }>

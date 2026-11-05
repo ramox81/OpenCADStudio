@@ -3241,7 +3241,6 @@ draw =
     .x-ray = X-레이
     .xline-specify-a-point = XLINE 점 지정:
     .xline-specify-through-point = XLINE 통과점 지정:
-    .n-object-s-erased = __ocs_fmt_0__ 개체가 지워졌습니다.
 
     .circle-specify-diameter = CIRCLE  { common.specify }: { common.diameter } <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK  { draw.select }: { common.arc } / { common.circle } <{ common.finish }>

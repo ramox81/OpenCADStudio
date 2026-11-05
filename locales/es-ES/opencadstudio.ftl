@@ -3242,7 +3242,6 @@ draw =
     .x-ray = Rayos X
     .xline-specify-a-point = XLINE  Precise un punto:
     .xline-specify-through-point = XLINE  Precise el punto de paso:
-    .n-object-s-erased = Se borraron __ocs_fmt_0__ objetos.
 
     .circle-specify-diameter = CIRCLE  { common.specify }: { common.diameter } <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK  { draw.select }: { common.arc } / { common.circle } <{ common.finish }>

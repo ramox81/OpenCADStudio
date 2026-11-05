@@ -3243,7 +3243,6 @@ draw =
     .x-ray = ເອັກສະເລ (X-Ray)
     .xline-specify-a-point = XLINE  ກຳນົດຈຸດ:
     .xline-specify-through-point = XLINE  ກຳນົດຈຸດທີ່ຜ່ານ:
-    .n-object-s-erased = ລຶບອອກແລ້ວ __ocs_fmt_0__ ວັດຖຸ.
 
     .circle-specify-diameter = CIRCLE  ກຳນົດເສັ້ນຜ່າກາງ  <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK  ເລືອກສ່ວນໂຄ້ງ ຫຼື ວົງມົນ <finish>:

@@ -3242,7 +3242,6 @@ draw =
     .x-ray = Ακτινογραφία
     .xline-specify-a-point = XLINE  Ορίστε σημείο:
     .xline-specify-through-point = XLINE  Ορίστε σημείο διέλευσης:
-    .n-object-s-erased = __ocs_fmt_0__ αντικείμενο(α) διαγράφηκαν.
 
     .circle-specify-diameter = CIRCLE  { common.specify }: { common.diameter } <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK  { draw.select }: { common.arc } / { common.circle } <{ common.finish }>

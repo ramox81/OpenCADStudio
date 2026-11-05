@@ -3241,7 +3241,6 @@ draw =
     .x-ray = Prześwietlenie
     .xline-specify-a-point = XLINE Określ punkt:
     .xline-specify-through-point = XLINE Określ punkt przelotowy:
-    .n-object-s-erased = Obiekt(y) __ocs_fmt_0__ został usunięty.
 
     .circle-specify-diameter = CIRCLE  { common.specify }: { common.diameter } <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK  { draw.select }: { common.arc } / { common.circle } <{ common.finish }>

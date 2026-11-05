@@ -3242,7 +3242,6 @@ draw =
     .x-ray = Röntgen
     .xline-specify-a-point = XLINE Geef een punt op:
     .xline-specify-through-point = XLINE Geef door punt:
-    .n-object-s-erased = __ocs_fmt_0__ object(en) gewist.
 
     .circle-specify-diameter = CIRCLE  { common.specify }: { common.diameter } <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK  { draw.select }: { common.arc } / { common.circle } <{ common.finish }>

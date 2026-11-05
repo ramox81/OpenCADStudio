@@ -3243,7 +3243,6 @@ draw =
     .x-ray = X-Ray
     .xline-specify-a-point = XLINE  Specify a point:
     .xline-specify-through-point = XLINE  Specify through point:
-    .n-object-s-erased = __ocs_fmt_0__ object(s) erased.
 
     .circle-specify-diameter = CIRCLE  Specify diameter  <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK  Select arc or circle <finish>:

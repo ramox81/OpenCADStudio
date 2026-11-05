@@ -3241,7 +3241,6 @@ draw =
     .x-ray = Raggi X
     .xline-specify-a-point = XLINE Specificare un punto:
     .xline-specify-through-point = XLINE Specificare il punto di passaggio:
-    .n-object-s-erased = __ocs_fmt_0__ oggetto/i cancellati.
 
     .circle-specify-diameter = CIRCLE  { common.specify }: { common.diameter } <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK  { draw.select }: { common.arc } / { common.circle } <{ common.finish }>

@@ -3237,7 +3237,6 @@ draw =
     .x-ray = Röntgen
     .xline-specify-a-point = XLINE Adjon meg egy pontot:
     .xline-specify-through-point = XLINE  Adja meg az áthaladási pontot:
-    .n-object-s-erased = __ocs_fmt_0__ objektum(ok) törölve.
 
     .circle-specify-diameter = CIRCLE  { common.specify }: { common.diameter } <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK  { draw.select }: { common.arc } / { common.circle } <{ common.finish }>

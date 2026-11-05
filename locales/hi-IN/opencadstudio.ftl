@@ -3230,7 +3230,6 @@ draw =
     .x-ray = एक्स-रे
     .xline-specify-a-point = XLINE एक बिंदु निर्दिष्ट करें:
     .xline-specify-through-point = XLINE बिंदु के माध्यम से निर्दिष्ट करें:
-    .n-object-s-erased = __ocs_fmt_0__ ऑब्जेक्ट (s) मिटा दिया गया।
 
     .circle-specify-diameter = CIRCLE  { common.specify }: { common.diameter } <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK  { draw.select }: { common.arc } / { common.circle } <{ common.finish }>

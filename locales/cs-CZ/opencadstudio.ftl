@@ -3246,7 +3246,6 @@ draw =
     .x-ray = Rentgen
     .xline-specify-a-point = XLINE  Určete bod:
     .xline-specify-through-point = XLINE  Určete bod, kterým prochází:
-    .n-object-s-erased = Vymazáno objektů: __ocs_fmt_0__.
 
     .circle-specify-diameter = CIRCLE  { common.specify }: { common.diameter } <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK  { draw.select }: { common.arc } / { common.circle } <{ common.finish }>

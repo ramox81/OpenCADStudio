@@ -4598,7 +4598,6 @@ pub(super) fn message_attribute(source: &str) -> Option<(&'static str, &'static 
         "{label}:" => Some(("command", "label")),
         "{label}: {count} {noun} created." => Some(("common", "label-count-noun-created")),
         "{label}: associative array created." => Some(("common", "label-associative-array-created")),
-        "{n} object(s) erased." => Some(("draw", "n-object-s-erased")),
         "{prefix}: '{style_name}' font set to '{font}'." => Some(("layers", "prefix-style-name-font-set-to-font")),
         "{prefix}: '{style_name}' oblique angle set to {deg:.1}°." => Some(("layers", "prefix-style-name-oblique-angle-set-to-deg-1")),
         "{prefix}: '{style_name}' width factor set to {factor:.3}." => Some(("layers", "prefix-style-name-width-factor-set-to-factor-3")),

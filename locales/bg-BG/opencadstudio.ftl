@@ -3241,7 +3241,6 @@ draw =
     .x-ray = Рентген
     .xline-specify-a-point = XLINE  Посочи точка:
     .xline-specify-through-point = XLINE  Посочи точка на преминаване:
-    .n-object-s-erased = __ocs_fmt_0__ обект(а) изтрити.
 
     .circle-specify-diameter = CIRCLE  { common.specify }: { common.diameter } <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK  { draw.select }: { common.arc } / { common.circle } <{ common.finish }>

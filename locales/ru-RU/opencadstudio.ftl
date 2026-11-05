@@ -3245,7 +3245,6 @@ draw =
     .x-ray = Рентгеновский
     .xline-specify-a-point = XLINE Укажите точку:
     .xline-specify-through-point = XLINE Укажите через точку:
-    .n-object-s-erased = Удалено объектов: __ocs_fmt_0__.
 
     .circle-specify-diameter = CIRCLE  { common.specify }: { common.diameter } <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK  { draw.select }: { common.arc } / { common.circle } <{ common.finish }>

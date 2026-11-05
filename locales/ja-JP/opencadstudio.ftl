@@ -3232,7 +3232,6 @@ draw =
     .x-ray = X 線
     .xline-specify-a-point = XLINE  点を指定:
     .xline-specify-through-point = XLINE  通過点を指定:
-    .n-object-s-erased = __ocs_fmt_0__ 個のオブジェクトを削除しました。
 
     .circle-specify-diameter = CIRCLE  { common.specify }: { common.diameter } <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK  { draw.select }: { common.arc } / { common.circle } <{ common.finish }>

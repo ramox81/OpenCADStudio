@@ -3248,7 +3248,6 @@ draw =
     .x-ray = X-Ray (xuyên thấu)
     .xline-specify-a-point = XLINE Xác định một điểm:
     .xline-specify-through-point = XLINE  Chỉ định điểm đi qua:
-    .n-object-s-erased = __ocs_fmt_0__ đối tượng đã bị xóa.
 
     .circle-specify-diameter = CIRCLE Xác định đường kính <__ocs_fmt_0__>:
     .centermark-select-arc-or-circle-finish = CENTERMARK Chọn cung hoặc đường tròn <kết thúc>:
