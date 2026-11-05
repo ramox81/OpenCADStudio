@@ -3257,6 +3257,12 @@ pub trait CadCommand: Send {
         false
     }
 
+    /// Take `L` / `LAST` at an object prompt as a pick of the most recently
+    /// created object.
+    fn entity_pick_accepts_last(&self) -> bool {
+        false
+    }
+
     /// A constraint point the host resolved for a `CheckConstraintPoint`
     /// pick, with its world position.
     fn accept_constraint_point(
