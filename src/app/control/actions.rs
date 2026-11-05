@@ -2858,7 +2858,7 @@ impl OpenCADStudio {
                 let (key, value) = spec.split_once('=').unwrap_or((spec, ""));
                 let bad = || failure("invalid_value", spec);
                 if key == "cancel" {
-                    return Ok(Task::done(Message::CloseModal));
+                    return Ok(self.update(Message::CloseModal));
                 }
                 Message::PdfDialog(match key {
                     "ok" => P::ImportOk,
@@ -2886,7 +2886,7 @@ impl OpenCADStudio {
                 let (key, value) = spec.split_once('=').unwrap_or((spec, ""));
                 let bad = || failure("invalid_value", spec);
                 if key == "cancel" {
-                    return Ok(Task::done(Message::CloseModal));
+                    return Ok(self.update(Message::CloseModal));
                 }
                 Message::ImportDialog(match key {
                     "ok" => I::ImportOk,
@@ -2923,7 +2923,7 @@ impl OpenCADStudio {
                 let (key, value) = spec.split_once('=').unwrap_or((spec, ""));
                 let bad = || failure("invalid_value", spec);
                 if key == "cancel" {
-                    return Ok(Task::done(Message::CloseModal));
+                    return Ok(self.update(Message::CloseModal));
                 }
                 let pick = |options: &[&str]| options.iter().position(|o| *o == value).ok_or_else(bad);
                 Message::ImportDialog(match key {
@@ -2983,7 +2983,7 @@ impl OpenCADStudio {
                         _ => return Err(bad()),
                     }),
                     "apply" | "ok" => I::TdsMatApply,
-                    "cancel" => return Ok(Task::done(Message::CloseModal)),
+                    "cancel" => return Ok(self.update(Message::CloseModal)),
                     _ => return Err(bad()),
                 })
             }
@@ -3174,7 +3174,7 @@ impl OpenCADStudio {
                 let on = matches!(value, "on" | "1" | "true");
                 let text = value.to_string();
                 if key == "cancel" {
-                    return Ok(Task::done(Message::CloseModal));
+                    return Ok(self.update(Message::CloseModal));
                 }
                 let message = match key {
                     "kind" => H::Kind(match value {
@@ -3257,7 +3257,7 @@ impl OpenCADStudio {
                     _ => Err(bad()),
                 };
                 if key == "cancel" {
-                    return Ok(Task::done(Message::CloseModal));
+                    return Ok(self.update(Message::CloseModal));
                 }
                 Message::ImportDialog(match key {
                     "ok" => I::DgnOk,
