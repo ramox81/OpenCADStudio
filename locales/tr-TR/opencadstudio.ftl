@@ -6972,7 +6972,7 @@ block-def =
 
 # Transient geometry inquiry readouts.
 measurement =
-    .distance = Distance = { $value }
+    .distance = Mesafe = { $value }
     .angle-start = { $command }  Specify vertex point or [Lines]:
     .first-line = { $command }  Select first line or [Points] (smaller angle):
     .second-line = { $command }  Select second line (smaller angle):
