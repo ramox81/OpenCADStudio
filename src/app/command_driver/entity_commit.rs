@@ -846,6 +846,16 @@ impl OpenCADStudio {
         None
     }
 
+    /// A hatch whose settings reorder it is undone with its sort table: the
+    /// draw order lives in an object, outside the entity delta.
+    fn hatch_undo_delta_safe(&self, i: usize) -> bool {
+        !self.tabs[i]
+            .active_cmd
+            .as_ref()
+            .and_then(|command| command.hatch_commit_options())
+            .is_some_and(|options| options.draw_order != 0)
+    }
+
     /// The layer a hatch of the running command goes on, and what its
     /// settings change on the entity once it exists.
     fn hatch_commit_layer(
@@ -943,7 +953,7 @@ impl OpenCADStudio {
         let boundary_vertices = hatch.boundary.len();
         let i = self.active_tab;
         let label = self.history_label_from_active_cmd(i, "HATCH");
-        let pending = self.begin_undo(i, label, 1, true);
+        let pending = self.begin_undo(i, label, 1, self.hatch_undo_delta_safe(i));
         let (layer, hatch_options) = self.hatch_commit_layer(i);
         let new_handle = self.tabs[i].scene.add_hatch(hatch, Some(&layer), None);
         self.apply_hatch_commit_options(i, new_handle, hatch_options.as_ref());
@@ -977,7 +987,7 @@ impl OpenCADStudio {
         let boundary_vertices = hatch.boundary.len();
         let i = self.active_tab;
         let label = self.history_label_from_active_cmd(i, "HATCH");
-        let pending = self.begin_undo(i, label, 1, true);
+        let pending = self.begin_undo(i, label, 1, self.hatch_undo_delta_safe(i));
         let (layer, hatch_options) = self.hatch_commit_layer(i);
         let new_handle =
             self.tabs[i]
@@ -1015,7 +1025,7 @@ impl OpenCADStudio {
         let boundary_count = boundaries.len();
         let i = self.active_tab;
         let label = self.history_label_from_active_cmd(i, "HATCH");
-        let pending = self.begin_undo(i, label, boundaries.len() + 1, true);
+        let pending = self.begin_undo(i, label, boundaries.len() + 1, self.hatch_undo_delta_safe(i));
         let mut sources = Vec::with_capacity(boundaries.len());
         for boundary in boundaries {
             let handles = self
@@ -1065,7 +1075,7 @@ impl OpenCADStudio {
     ) {
         let i = self.active_tab;
         let label = self.history_label_from_active_cmd(i, "HATCH");
-        let pending = self.begin_undo(i, label, 1, true);
+        let pending = self.begin_undo(i, label, 1, self.hatch_undo_delta_safe(i));
         let (layer, hatch_options) = self.hatch_commit_layer(i);
         let new_handle = self.tabs[i].scene.add_hatch(hatch, Some(&layer), entity_style);
         self.apply_hatch_commit_options(i, new_handle, hatch_options.as_ref());
@@ -1093,7 +1103,7 @@ impl OpenCADStudio {
         };
         let i = self.active_tab;
         let label = self.history_label_from_active_cmd(i, "HATCH");
-        let pending = self.begin_undo(i, label, hatches.len(), true);
+        let pending = self.begin_undo(i, label, hatches.len(), self.hatch_undo_delta_safe(i));
         let (layer, hatch_options) = self.hatch_commit_layer(i);
         for hatch in hatches {
             let new_handle =

@@ -5,10 +5,11 @@ use crate::modules::IconKind;
 use crate::scene::model::hatch_model::{GradientKind, HatchModel, HatchPattern, PatFamily};
 use crate::scene::model::wire_model::WireModel;
 use crate::t;
+use super::polyline::{ArcStep, Sub};
 use codec::Handle;
 use glam::DVec3;
 use kernel::geom2d::{
-    bounded_faces, contains, ring_nesting_depths, signed_area, Circle, Curve, Line, Tolerance,
+    bounded_faces, contains, ring_nesting_depths, signed_area, Curve, Line, Tolerance,
 };
 
 // ── Icons ──────────────────────────────────────────────────────────────────
@@ -638,9 +639,9 @@ pub struct HatchCommand {
     manual_pts: Vec<DVec3>,
     manual_bulges: Vec<f64>,
     manual_arc_mode: bool,
-    manual_arc_midpoint: Option<DVec3>,
-    /// Arc's Second pt: the next arc passes through a second point.
-    manual_arc_three: bool,
+    /// The arc option being answered (PLINE's arc steps); `None` asks for
+    /// the endpoint of a tangent arc.
+    arc_sub: Sub,
     shape: Option<Shape>,
     retain_boundaries: bool,
     /// The fill chosen in the settings (else the selected hatch's or HPNAME).
@@ -691,8 +692,7 @@ impl HatchCommand {
             manual_pts: vec![],
             manual_bulges: vec![],
             manual_arc_mode: false,
-            manual_arc_midpoint: None,
-            manual_arc_three: false,
+            arc_sub: Sub::None,
             shape: None,
             retain_boundaries: false,
             fill: None,
@@ -936,8 +936,7 @@ impl HatchCommand {
         self.manual_pts.clear();
         self.manual_bulges.clear();
         self.manual_arc_mode = false;
-        self.manual_arc_midpoint = None;
-        self.manual_arc_three = false;
+        self.arc_sub = Sub::None;
     }
 
     fn drawn_polyline(&self, closed: bool) -> kernel::geom2d::Polyline {
@@ -1160,29 +1159,45 @@ impl HatchCommand {
     }
 
     /// The direction the drawn path leaves its last point in: along the last
-    /// line, or along the last arc's end tangent (+X before any segment).
-    fn end_direction(&self) -> DVec3 {
+    /// line, or the last arc's end tangent; `None` before any segment.
+    fn end_tangent(&self) -> Option<glam::Vec2> {
         let n = self.manual_pts.len();
-        if n < 2 {
-            return DVec3::X;
-        }
-        let chord = (self.manual_pts[n - 1] - self.manual_pts[n - 2]).normalize_or(DVec3::X);
-        let half_sweep = 2.0 * self.manual_bulges.get(n - 2).copied().unwrap_or(0.0).atan();
-        let (sin, cos) = half_sweep.sin_cos();
-        DVec3::new(chord.x * cos - chord.y * sin, chord.x * sin + chord.y * cos, 0.0)
+        (n >= 2).then(|| {
+            super::polyline::seg_exit_tangent(
+                self.manual_pts[n - 2],
+                self.manual_pts[n - 1],
+                self.manual_bulges.get(n - 2).copied().unwrap_or(0.0),
+            )
+        })?
+    }
+
+    fn last_point2(&self) -> Option<glam::DVec2> {
+        self.manual_pts.last().map(|p| glam::DVec2::new(p.x, p.y))
     }
 
     /// An arc from the last point to `end`, tangent to the path there.
     fn add_tangent_arc(&mut self, end: DVec3) {
-        let Some(&start) = self.manual_pts.last() else {
+        let Some(a) = self.last_point2() else {
             return;
         };
-        let direction = self.end_direction();
-        let chord = end - start;
-        let turn = (direction.x * chord.y - direction.y * chord.x)
-            .atan2(direction.x * chord.x + direction.y * chord.y);
-        self.manual_bulges.push((turn * 0.5).tan());
+        let tangent = self.end_tangent().map_or(glam::DVec2::X, |t| t.as_dvec2());
+        let bulge = super::polyline::compute_bulge(a, tangent, glam::DVec2::new(end.x, end.y));
+        self.manual_bulges.push(bulge);
         self.manual_pts.push(end);
+    }
+
+    /// What an arc option step made of an input.
+    fn arc_step(&mut self, step: ArcStep) -> CmdResult {
+        match step {
+            ArcStep::Next(sub) => self.arc_sub = sub,
+            ArcStep::Arc(e, bulge) => {
+                let z = self.manual_pts.last().map_or(0.0, |p| p.z);
+                self.manual_bulges.push(bulge);
+                self.manual_pts.push(DVec3::new(e.x, e.y, z));
+                self.arc_sub = Sub::None;
+            }
+        }
+        CmdResult::NeedPoint
     }
 
     /// The next point `distance` along the last segment (+X after the start).
@@ -1202,7 +1217,8 @@ impl HatchCommand {
     }
 
     fn undo_drawn_point(&mut self) -> CmdResult {
-        if self.manual_arc_midpoint.take().is_some() {
+        if self.arc_sub != Sub::None {
+            self.arc_sub = Sub::None;
             return CmdResult::NeedPoint;
         }
         if self.manual_pts.len() > 1 {
@@ -1398,32 +1414,6 @@ impl HatchCommand {
     }
 }
 
-fn arc_bulge(start: DVec3, middle: DVec3, end: DVec3) -> Option<f64> {
-    let curvature = DVec3::from_array(kernel::space::curve::curvature_through(
-        start.to_array(),
-        middle.to_array(),
-        end.to_array(),
-    ));
-    let squared = curvature.length_squared();
-    if squared <= f64::MIN_POSITIVE {
-        return None;
-    }
-    let centre = start + curvature / squared;
-    let circle = Curve::Circle(Circle {
-        centre: [centre.x, centre.y],
-        radius: squared.sqrt().recip(),
-    });
-    let first = circle.parameter_at([start.x, start.y]);
-    let through = (circle.parameter_at([middle.x, middle.y]) - first).rem_euclid(1.0);
-    let ccw = (circle.parameter_at([end.x, end.y]) - first).rem_euclid(1.0);
-    let sweep = if through <= ccw + 1.0e-12 {
-        ccw * std::f64::consts::TAU
-    } else {
-        (ccw - 1.0) * std::f64::consts::TAU
-    };
-    Some((sweep * 0.25).tan())
-}
-
 impl CadCommand for HatchCommand {
     fn name(&self) -> &'static str {
         if self.gradient {
@@ -1463,10 +1453,8 @@ impl CadCommand for HatchCommand {
                         }
                     }
                     HatchMode::Manual if self.manual_arc_mode => {
-                        if self.manual_arc_midpoint.is_some() {
-                            crate::tr!("hatch-cmd", "arc-end")
-                        } else if self.manual_arc_three {
-                            crate::tr!("hatch-cmd", "arc-second")
+                        if let Some(prompt) = self.arc_sub.arc_prompt(self.end_tangent()) {
+                            prompt
                         } else if self.manual_pts.len() >= 2 {
                             crate::tr!("hatch-cmd", "arc-endpoint-close")
                         } else {
@@ -1544,14 +1532,17 @@ impl CadCommand for HatchCommand {
                     options
                 }
                 HatchMode::Manual if self.manual_arc_mode => {
-                    if self.manual_arc_three {
-                        return Vec::new();
+                    if self.arc_sub != Sub::None {
+                        return self.arc_sub.arc_options();
                     }
-                    let mut options = Vec::new();
+                    let mut options =
+                        vec![CmdOption::new("Angle", "A"), CmdOption::new("CEnter", "CE")];
                     if self.manual_pts.len() >= 2 {
                         options.push(CmdOption::new("CLose", "CL"));
                     }
+                    options.push(CmdOption::new("Direction", "D"));
                     options.push(CmdOption::new("Line", "L"));
+                    options.push(CmdOption::new("Radius", "R"));
                     options.push(CmdOption::new("Second pt", "S"));
                     options.push(CmdOption::new("Undo", "U"));
                     options
@@ -1642,14 +1633,13 @@ impl CadCommand for HatchCommand {
                         self.manual_bulges.push(0.0);
                     }
                     self.manual_pts.push(pt);
-                } else if let Some(middle) = self.manual_arc_midpoint.take() {
-                    let start = *self.manual_pts.last().unwrap();
-                    self.manual_bulges
-                        .push(arc_bulge(start, middle, pt).unwrap_or(0.0));
-                    self.manual_pts.push(pt);
-                    self.manual_arc_three = false;
-                } else if self.manual_arc_three {
-                    self.manual_arc_midpoint = Some(pt);
+                } else if self.arc_sub != Sub::None {
+                    let a = self.last_point2().unwrap_or_default();
+                    if let Some(step) =
+                        self.arc_sub.arc_point(glam::DVec2::new(pt.x, pt.y), a, self.end_tangent())
+                    {
+                        return self.arc_step(step);
+                    }
                 } else {
                     self.add_tangent_arc(pt);
                 }
@@ -1697,9 +1687,22 @@ impl CadCommand for HatchCommand {
         }
         if self.mode == HatchMode::Manual {
             if self.manual_arc_mode {
+                // A chord direction defaults to the path's direction.
+                if self.arc_sub.is_chord_step() {
+                    let a = self.last_point2().unwrap_or_default();
+                    let tangent = self.end_tangent();
+                    let t = tangent.map_or(glam::DVec2::X, |t| t.as_dvec2());
+                    let degrees = t.y.atan2(t.x).to_degrees();
+                    return match self.arc_sub.arc_chord(degrees, a, tangent) {
+                        Some(step) => self.arc_step(step),
+                        None => CmdResult::NeedPoint,
+                    };
+                }
+                if self.arc_sub != Sub::None {
+                    self.arc_sub = Sub::None;
+                    return CmdResult::NeedPoint;
+                }
                 self.manual_arc_mode = false;
-                self.manual_arc_three = false;
-                self.manual_arc_midpoint = None;
                 return CmdResult::NeedPoint;
             }
             if !self.manual_pts.is_empty() {
@@ -1986,20 +1989,29 @@ impl CadCommand for HatchCommand {
                         return Some(CmdResult::NeedPoint);
                     }
                 }
+                if self.manual_arc_mode && self.arc_sub != Sub::None && upper != "U" {
+                    let a = self.last_point2().unwrap_or_default();
+                    return match self.arc_sub.arc_text(upper.as_str(), a, self.end_tangent()) {
+                        Some(step) => Some(self.arc_step(step)),
+                        None if typed_point => None,
+                        None => Some(invalid_keyword()),
+                    };
+                }
+                if self.manual_arc_mode && upper != "CL" {
+                    if let Some(sub) = Sub::arc_option(upper.as_str()) {
+                        self.arc_sub = sub;
+                        return Some(CmdResult::NeedPoint);
+                    }
+                }
                 match upper.as_str() {
                     "A" | "ARC" if !self.manual_arc_mode => {
                         self.manual_arc_mode = true;
-                        self.manual_arc_midpoint = None;
+                        self.arc_sub = Sub::None;
                         Some(CmdResult::NeedPoint)
                     }
                     "L" | "LINE" if self.manual_arc_mode => {
                         self.manual_arc_mode = false;
-                        self.manual_arc_three = false;
-                        self.manual_arc_midpoint = None;
-                        Some(CmdResult::NeedPoint)
-                    }
-                    "S" | "SECOND" if self.manual_arc_mode && !self.manual_arc_three => {
-                        self.manual_arc_three = true;
+                        self.arc_sub = Sub::None;
                         Some(CmdResult::NeedPoint)
                     }
                     "CL" | "CLOSE" if self.manual_arc_mode && self.manual_pts.len() >= 2 => {
@@ -2017,7 +2029,6 @@ impl CadCommand for HatchCommand {
                     }
                     "U" | "UNDO" => Some(self.undo_drawn_point()),
                     "E" | "EXIT" if !self.manual_arc_mode => Some(self.on_enter()),
-                    // Angle, CEnter, Direction and Radius are not offered.
                     _ if self.manual_arc_mode && !typed_point => Some(point_or_keyword()),
                     _ => None,
                 }
