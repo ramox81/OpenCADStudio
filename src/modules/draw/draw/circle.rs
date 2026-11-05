@@ -148,7 +148,7 @@ impl CircleCommand {
 
     /// The prompt of the current step as HATCH's Circle asks it.
     pub(crate) fn hatch_prompt(&self) -> String {
-        let format = crate::entities::common::format_length;
+        let format = |value: f64| format!("{value:.4}");
         match self.step {
             StepCR::Center => crate::tr!("hatch-cmd", "circle-center"),
             StepCR::Radius(_) => {
@@ -1348,7 +1348,7 @@ impl CircleTTRCommand {
             StepTTR::Radius { .. } => crate::tr!(
                 "hatch-cmd",
                 "circle-ttr-radius",
-                radius = crate::entities::common::format_length(self.default_r)
+                radius = format!("{:.4}", self.default_r)
             ),
         }
     }

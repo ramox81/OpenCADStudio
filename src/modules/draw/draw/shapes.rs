@@ -403,7 +403,8 @@ impl RectCommand {
 
     /// `Current rectangle modes:` while a chamfer, fillet or elevation is set.
     pub(crate) fn modes_line(&self) -> Option<String> {
-        use crate::entities::common::format_length;
+        // The prompts show four decimals, as the reference does.
+        let format_length = |value: f64| format!("{value:.4}");
         let mut modes = Vec::new();
         if self.fillet_radius > 0.0 {
             modes.push(format!("Fillet={}", format_length(self.fillet_radius)));
@@ -424,7 +425,7 @@ impl RectCommand {
 
     /// The prompt of the current step as HATCH asks it.
     pub(crate) fn hatch_prompt(&self) -> String {
-        use crate::entities::common::format_length;
+        let format_length = |value: f64| format!("{value:.4}");
         match self.step {
             RectStep::FirstCorner => crate::tr!("hatch-cmd", "rect-first"),
             RectStep::Opposite | RectStep::PlaceSized { .. } => {

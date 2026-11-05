@@ -672,7 +672,7 @@ impl OpenCADStudio {
             }
             super::super::ModalKind::HatchSettings => {
                 let state = self.hatch_settings_dialog.as_ref()?;
-                sized_flow(ex, 620, 640, |flow| {
+                sized_flow(ex, 620, 720, |flow| {
                     crate::ui::window::hatch_dialogs::view_settings(state, flow)
                 })
             }

@@ -880,6 +880,48 @@ impl OpenCADStudio {
         else {
             return;
         };
+        if let Some(message) = &options.message {
+            self.command_line.push_output(message);
+        }
+        if options.annotative {
+            crate::scene::annotative::set_entity_annotative(
+                &mut self.tabs[i].scene.document,
+                handle,
+                true,
+            );
+            if let Some(scale) = self.tabs[i].scene.creation_annotation_scale_handle() {
+                crate::scene::annotative::create_annotation_context(
+                    &mut self.tabs[i].scene.document,
+                    handle,
+                    scale,
+                );
+            }
+        }
+        // HPDRAWORDER: back, front, behind or in front of the boundary.
+        let boundary: Vec<codec::Handle> = hatch
+            .paths
+            .iter()
+            .flat_map(|path| path.boundary_handles.iter().copied())
+            .filter(|h| *h != handle)
+            .collect();
+        let _ = match options.draw_order {
+            1 => self.apply_draw_order(i, &[handle], Some(false), None),
+            2 => self.apply_draw_order(i, &[handle], Some(true), None),
+            3 if !boundary.is_empty() => {
+                self.apply_draw_order(i, &[handle], None, Some((false, &boundary)))
+            }
+            4 if !boundary.is_empty() => {
+                self.apply_draw_order(i, &[handle], None, Some((true, &boundary)))
+            }
+            _ => None,
+        };
+        if options.color.is_none()
+            && options.transparency.is_none()
+            && options.background.is_none()
+            && options.user_double.is_none()
+        {
+            return;
+        }
         if let Some(color) = &options.color {
             hatch.common.color = color.clone();
         }

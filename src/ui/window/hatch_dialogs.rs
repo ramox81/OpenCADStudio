@@ -118,6 +118,11 @@ pub enum HatchDialogMsg {
     Gap(String),
     Layer(String),
     Transparency(String),
+    GradientColor1(String),
+    GradientColor2(String),
+    /// The draw order's label (see `draw_order_labels`).
+    DrawOrder(String),
+    Annotative(bool),
     /// Boundaries: OK and continue picking points (0) or selecting (1).
     Boundary(u8),
     Ok,
@@ -145,6 +150,46 @@ fn island_of(style: HatchStyleType) -> u8 {
         HatchStyleType::Outer => 1,
         HatchStyleType::Ignore => 2,
     }
+}
+
+/// HPDRAWORDER's choices, in its order.
+pub fn draw_order_labels() -> Vec<String> {
+    ["order-none", "order-back", "order-front", "order-behind", "order-in-front"]
+        .iter()
+        .map(|key| crate::i18n::loader().get_attr("hatch-settings", key))
+        .collect()
+}
+
+/// A swatch of the chosen fill.
+fn preview<'a>(state: &'a HatchSettingsState) -> Element<'a, Message> {
+    let s = &state.settings;
+    let swatch: Element<'a, Message> = match &s.fill {
+        HatchFill::Gradient(kind, invert) => {
+            let angle = state.angle.trim().replace(',', ".").parse::<f64>().unwrap_or(0.0);
+            crate::ui::window::gradient_editor::preview_image(
+                crate::ui::window::gradient_editor::fill_preview(
+                    *kind,
+                    *invert,
+                    s.gradient_colors[0].clone(),
+                    s.gradient_colors[1].clone(),
+                    angle,
+                ),
+            )
+        }
+        fill => {
+            let (_, pattern) = crate::modules::draw::draw::hatch::fill_pattern(
+                fill,
+                0.0,
+                &s.gradient_colors,
+            );
+            crate::ui::properties::hatch_pattern_preview(pattern, 48.0)
+        }
+    };
+    container(swatch)
+        .height(Length::Fixed(48.0))
+        .width(Fill)
+        .style(well_style)
+        .into()
 }
 
 /// The "use current" / "none" choice at the top of a list.
@@ -252,14 +297,28 @@ pub fn view_settings<'a>(
         }
         _ => {}
     }
-    fill = fill.push(labelled(
-        tr("color"),
-        list(
-            s.color.clone().map_or_else(current_label, color_label),
-            colors,
-            HatchDialogMsg::Color,
-        ),
-    ));
+    if matches!(s.fill, HatchFill::Gradient(..)) {
+        let stops: Vec<String> = COLORS[2..].iter().map(|c| c.to_string()).collect();
+        fill = fill
+            .push(labelled(
+                tr("color-1"),
+                list(color_label(s.gradient_colors[0].clone()), stops.clone(), HatchDialogMsg::GradientColor1),
+            ))
+            .push(labelled(
+                tr("color-2"),
+                list(color_label(s.gradient_colors[1].clone()), stops, HatchDialogMsg::GradientColor2),
+            ));
+    } else {
+        fill = fill.push(labelled(
+            tr("color"),
+            list(
+                s.color.clone().map_or_else(current_label, color_label),
+                colors,
+                HatchDialogMsg::Color,
+            ),
+        ));
+    }
+    fill = fill.push(preview(state));
     if !matches!(s.fill, HatchFill::Gradient(..)) {
         fill = fill.push(labelled(
             tr("background"),
@@ -335,6 +394,18 @@ pub fn view_settings<'a>(
         ),
         labelled(tr("gap"), input(&state.gap, true, HatchDialogMsg::Gap)),
         labelled(
+            tr("draw-order"),
+            list(
+                draw_order_labels()[s.draw_order.min(4) as usize].clone(),
+                draw_order_labels(),
+                HatchDialogMsg::DrawOrder,
+            ),
+        ),
+        row![
+            Space::new().width(Length::Fixed(116.0)),
+            chip(tr("annotative"), s.annotative, msg(HatchDialogMsg::Annotative(!s.annotative))),
+        ],
+        labelled(
             tr("layer"),
             list(
                 s.layer.clone().unwrap_or_else(current_label),
@@ -375,7 +446,9 @@ pub fn view_settings<'a>(
         );
     }
     column![
-        body,
+        // The options card runs past a short window: the cards scroll, the
+        // buttons stay.
+        iced::widget::scrollable(body.padding(iced::Padding::ZERO.right(10))).height(Fill),
         row![
             Space::new().width(Fill),
             dialog_button(t!("Cancel"), Message::CloseModal, false),
@@ -386,6 +459,7 @@ pub fn view_settings<'a>(
     .spacing(12)
     .padding([10, 12])
     .width(sizing.width)
+    .height(sizing.height)
     .into()
 }
 
@@ -517,6 +591,22 @@ pub fn edit(state: &mut HatchSettingsState, message: &HatchDialogMsg) {
             s.layer = (*name != current_label()).then(|| name.clone());
         }
         HatchDialogMsg::Transparency(text) => state.transparency = text.clone(),
+        HatchDialogMsg::GradientColor1(label) => {
+            if let Some(color) = parse_color(label) {
+                s.gradient_colors[0] = color;
+            }
+        }
+        HatchDialogMsg::GradientColor2(label) => {
+            if let Some(color) = parse_color(label) {
+                s.gradient_colors[1] = color;
+            }
+        }
+        HatchDialogMsg::DrawOrder(label) => {
+            if let Some(order) = draw_order_labels().iter().position(|l| l == label) {
+                s.draw_order = order as u8;
+            }
+        }
+        HatchDialogMsg::Annotative(on) => s.annotative = *on,
         _ => {}
     }
 }

@@ -184,12 +184,38 @@ fn rte_boundary(pts: impl Iterator<Item = (f64, f64)>) -> (Vec<[f32; 2]>, [f64; 
 
 thread_local! {
     /// HPNAME: the pattern a new hatch starts with, for this session only.
-    static HPNAME: std::cell::RefCell<String> = std::cell::RefCell::new("SOLID".to_string());
+    static HPNAME: std::cell::RefCell<String> = std::cell::RefCell::new("_SOLID".to_string());
+}
+
+/// HPNAME as it is stored (`_SOLID` at first, `SOLID` after a gradient).
+pub fn hpname() -> String {
+    HPNAME.with(|name| name.borrow().clone())
+}
+
+pub fn set_hpname(name: &str) {
+    HPNAME.with(|hpname| *hpname.borrow_mut() = name.to_string());
+}
+
+/// The pattern a typed HPNAME names, spelled as the pattern file has it
+/// (a leading `_` kept); `.` is the first pattern of the file.
+pub fn hpname_value(typed: &str) -> Option<String> {
+    let typed = typed.trim().trim_matches('"');
+    if typed == "." {
+        return crate::scene::model::hatch_patterns::catalog()
+            .iter()
+            .find(|entry| matches!(entry.gpu, HatchPattern::Pattern(_)))
+            .map(|entry| entry.name.clone());
+    }
+    let bare = typed.strip_prefix('_').unwrap_or(typed);
+    crate::scene::model::hatch_patterns::find(bare).map(|entry| {
+        let prefix = if typed.starts_with('_') { "_" } else { "" };
+        format!("{prefix}{}", entry.name)
+    })
 }
 
 /// HPNAME when it names a pattern, else `fallback`.
 pub fn last_pattern_name(fallback: &str) -> String {
-    let name = HPNAME.with(|name| name.borrow().clone());
+    let name = hpname().trim_start_matches('_').to_string();
     if name.eq_ignore_ascii_case("SOLID") {
         fallback.to_string()
     } else {
@@ -255,10 +281,17 @@ pub struct HatchSettings {
     pub gap: f64,
     /// Boundaries: the method to continue with (0 pick, 1 select).
     pub method: Option<u8>,
+    /// GFCLR1 / GFCLR2.
+    pub gradient_colors: [codec::types::Color; 2],
+    /// HPDRAWORDER: 0 none, 1 back, 2 front, 3 behind the boundary,
+    /// 4 in front of the boundary.
+    pub draw_order: u8,
+    /// HPANNOTATIVE.
+    pub annotative: bool,
 }
 
 /// What a hatch entity takes from the settings once it is created.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct HatchCommitOptions {
     pub layer: Option<String>,
     pub color: Option<codec::types::Color>,
@@ -266,6 +299,26 @@ pub struct HatchCommitOptions {
     pub background: Option<codec::types::Color>,
     /// A user-defined pattern, crossed or not.
     pub user_double: Option<bool>,
+    /// HPDRAWORDER (see `HatchSettings::draw_order`).
+    pub draw_order: u8,
+    pub annotative: bool,
+    /// A line printed once the hatch exists.
+    pub message: Option<String>,
+}
+
+impl Default for HatchCommitOptions {
+    fn default() -> Self {
+        Self {
+            layer: None,
+            color: None,
+            transparency: None,
+            background: None,
+            user_double: None,
+            draw_order: 3,
+            annotative: false,
+            message: None,
+        }
+    }
 }
 
 /// The prompt HATCH is at besides its boundary method's own prompt.
@@ -347,7 +400,27 @@ fn parse_number(text: &str) -> Option<f64> {
 }
 
 /// The pattern a fill draws with, and its name.
-fn fill_pattern(fill: &HatchFill, angle_deg: f32) -> (String, HatchPattern) {
+/// GFCLR1 / GFCLR2: the two colours a new gradient starts with.
+pub const GRADIENT_COLORS: [codec::types::Color; 2] =
+    [codec::types::Color::Index(5), codec::types::Color::Index(2)];
+
+/// A colour as the fill renders it.
+pub fn color_rgba(color: &codec::types::Color, alpha: f32) -> [f32; 4] {
+    let (r, g, b) = match color {
+        codec::types::Color::Rgb { r, g, b } => (*r, *g, *b),
+        codec::types::Color::Index(index) => {
+            codec::types::aci_table::aci_to_rgb(*index).unwrap_or((128, 128, 128))
+        }
+        _ => (255, 255, 255),
+    };
+    [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, alpha]
+}
+
+pub fn fill_pattern(
+    fill: &HatchFill,
+    angle_deg: f32,
+    colors: &[codec::types::Color; 2],
+) -> (String, HatchPattern) {
     match fill {
         HatchFill::Solid => ("SOLID".into(), HatchPattern::Solid),
         HatchFill::Pattern(name) => crate::scene::model::hatch_patterns::find(name)
@@ -372,14 +445,137 @@ fn fill_pattern(fill: &HatchFill, angle_deg: f32) -> (String, HatchPattern) {
             kind.dxf_name(*invert).into(),
             HatchPattern::Gradient {
                 angle_deg,
-                // GFCLR2: the second colour of a two-colour gradient (yellow).
-                color2: [1.0, 1.0, 0.0, 0.0],
+                color2: color_rgba(&colors[1], 0.0),
                 kind: *kind,
                 invert: *invert,
                 shift: 0.0,
             },
         ),
     }
+}
+
+fn same_point(a: [f64; 2], b: [f64; 2]) -> bool {
+    let scale = 1.0 + a[0].abs().max(a[1].abs());
+    (a[0] - b[0]).abs() <= 1.0e-9 * scale && (a[1] - b[1]).abs() <= 1.0e-9 * scale
+}
+
+/// A loop of points and bulges with its arcs tessellated.
+fn bulged_ring(points: &[[f64; 2]], bulges: &[f64]) -> Vec<[f64; 2]> {
+    let count = points.len();
+    let mut ring = Vec::new();
+    for (index, &start) in points.iter().enumerate() {
+        let end = points[(index + 1) % count];
+        let bulge = bulges.get(index).copied().unwrap_or(0.0);
+        match kernel::geom2d::BulgeArc::from_bulge(start, end, bulge)
+            .filter(|_| bulge.abs() > 1.0e-12)
+        {
+            Some(arc) => {
+                let mut arc_points = arc.tessellate_angle(std::f64::consts::PI / 32.0);
+                arc_points.pop();
+                ring.extend(arc_points);
+            }
+            None => ring.push(start),
+        }
+    }
+    ring
+}
+
+/// A closed polyline boundary loop with its bulges.
+fn polyline_path(points: &[[f64; 2]], bulges: &[f64]) -> codec::entities::BoundaryPath {
+    use codec::entities::{BoundaryEdge, BoundaryPath, PolylineEdge};
+    let vertices = points
+        .iter()
+        .enumerate()
+        .map(|(index, p)| {
+            codec::types::Vector3::new(p[0], p[1], bulges.get(index).copied().unwrap_or(0.0))
+        })
+        .collect();
+    let mut path = BoundaryPath::new();
+    path.add_edge(BoundaryEdge::Polyline(PolylineEdge {
+        vertices,
+        is_closed: true,
+    }));
+    path
+}
+
+/// One side of a path band: the path's segments moved `distance` to the left
+/// of travel (a negative distance to the right), joined where they meet.
+/// Lines meeting lines are mitred; segments that already meet (a tangent
+/// arc) join at that point. `None` for a joint it cannot make that way.
+fn offset_rail(
+    points: &[[f64; 2]],
+    bulges: &[f64],
+    closed: bool,
+    distance: f64,
+) -> Option<(Vec<[f64; 2]>, Vec<f64>)> {
+    let count = points.len();
+    let segments: Vec<([f64; 2], [f64; 2], f64)> = (0..bulges.len())
+        .map(|k| (points[k], points[(k + 1) % count], bulges[k]))
+        .collect();
+    let mut moved = Vec::with_capacity(segments.len());
+    for &(a, b, bulge) in &segments {
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        let length = dx.hypot(dy);
+        if length <= 0.0 {
+            return None;
+        }
+        if bulge.abs() <= 1.0e-12 {
+            let n = [-dy / length * distance, dx / length * distance];
+            moved.push(([a[0] + n[0], a[1] + n[1]], [b[0] + n[0], b[1] + n[1]], 0.0));
+            continue;
+        }
+        let arc = kernel::geom2d::BulgeArc::from_bulge(a, b, bulge)?;
+        // A counter-clockwise arc has its centre on the left.
+        let radius = if bulge > 0.0 {
+            arc.radius - distance
+        } else {
+            arc.radius + distance
+        };
+        if radius <= 0.0 {
+            return None;
+        }
+        let at = |p: [f64; 2]| {
+            let (vx, vy) = (p[0] - arc.center[0], p[1] - arc.center[1]);
+            let r = vx.hypot(vy);
+            [arc.center[0] + vx / r * radius, arc.center[1] + vy / r * radius]
+        };
+        moved.push((at(a), at(b), bulge));
+    }
+    let join = |k: usize, next: usize| -> Option<[f64; 2]> {
+        let (a0, a1, ab) = moved[k];
+        let (b0, b1, bb) = moved[next];
+        if same_point(a1, b0) {
+            return Some(a1);
+        }
+        if ab.abs() > 1.0e-12 || bb.abs() > 1.0e-12 {
+            return None;
+        }
+        let (d1, d2) = ([a1[0] - a0[0], a1[1] - a0[1]], [b1[0] - b0[0], b1[1] - b0[1]]);
+        let cross = d1[0] * d2[1] - d1[1] * d2[0];
+        if cross.abs() <= 1.0e-12 * d1[0].hypot(d1[1]) * d2[0].hypot(d2[1]) {
+            return Some(a1);
+        }
+        let t = ((b0[0] - a0[0]) * d2[1] - (b0[1] - a0[1]) * d2[0]) / cross;
+        Some([a0[0] + d1[0] * t, a0[1] + d1[1] * t])
+    };
+    let n = moved.len();
+    let mut out = Vec::with_capacity(n + 1);
+    if closed {
+        for k in 0..n {
+            out.push(join((k + n - 1) % n, k)?);
+        }
+    } else {
+        out.push(moved[0].0);
+        for k in 1..n {
+            out.push(join(k - 1, k)?);
+        }
+        out.push(moved[n - 1].1);
+    }
+    let mut out_bulges: Vec<f64> = segments.iter().map(|s| s.2).collect();
+    if !closed {
+        out_bulges.push(0.0);
+    }
+    Some((out, out_bulges))
 }
 
 /// Join boundary edges end to end into closed loops, dropping vertices in
@@ -443,6 +639,8 @@ pub struct HatchCommand {
     manual_bulges: Vec<f64>,
     manual_arc_mode: bool,
     manual_arc_midpoint: Option<DVec3>,
+    /// Arc's Second pt: the next arc passes through a second point.
+    manual_arc_three: bool,
     shape: Option<Shape>,
     retain_boundaries: bool,
     /// The fill chosen in the settings (else the selected hatch's or HPNAME).
@@ -454,6 +652,9 @@ pub struct HatchCommand {
     separate_hatches: bool,
     island_style: codec::entities::HatchStyleType,
     commit: HatchCommitOptions,
+    gradient_colors: [codec::types::Color; 2],
+    /// The elevation of the boundary being finished (a rectangle's).
+    elevation: f64,
     inherited: Option<(HatchModel, codec::types::Color, codec::types::Transparency)>,
     plane: WorkingPlane,
     /// HPGAPTOL: gaps up to this size count as closed for a picked point.
@@ -491,6 +692,7 @@ impl HatchCommand {
             manual_bulges: vec![],
             manual_arc_mode: false,
             manual_arc_midpoint: None,
+            manual_arc_three: false,
             shape: None,
             retain_boundaries: false,
             fill: None,
@@ -504,6 +706,8 @@ impl HatchCommand {
                 .map(|(model, _, _)| model.style)
                 .unwrap_or(codec::entities::HatchStyleType::Normal),
             commit: HatchCommitOptions::default(),
+            gradient_colors: GRADIENT_COLORS,
+            elevation: 0.0,
             inherited,
             plane,
             gap_tolerance: 0.0,
@@ -515,6 +719,7 @@ impl HatchCommand {
     /// GRADIENT: the same boundary steps with a gradient fill.
     pub fn gradient(mut self) -> Self {
         self.gradient = true;
+        self.commit.message = Some(crate::tr!("hatch-cmd", "associativity-removed"));
         self.inherited = None;
         self.fill = Some(HatchFill::Gradient(GradientKind::Linear, false));
         self
@@ -650,7 +855,7 @@ impl HatchCommand {
         }
         let name = match &self.inherited {
             Some((model, _, _)) => model.name.clone(),
-            None => HPNAME.with(|name| name.borrow().clone()),
+            None => hpname().trim_start_matches('_').to_string(),
         };
         if name.eq_ignore_ascii_case("SOLID") {
             HatchFill::Solid
@@ -682,13 +887,16 @@ impl HatchCommand {
             island: self.island_style,
             gap: self.gap_tolerance,
             method: None,
+            gradient_colors: self.gradient_colors.clone(),
+            draw_order: self.commit.draw_order,
+            annotative: self.commit.annotative,
         }
     }
 
     fn apply_settings(&mut self, settings: HatchSettings) {
         if matches!(settings.fill, HatchFill::Solid | HatchFill::Pattern(_)) && !self.gradient {
-            let (name, _) = fill_pattern(&settings.fill, 0.0);
-            HPNAME.with(|hpname| *hpname.borrow_mut() = name);
+            let (name, _) = fill_pattern(&settings.fill, 0.0, &self.gradient_colors);
+            set_hpname(&name);
         }
         self.commit.user_double = match &settings.fill {
             HatchFill::User { double, .. } => Some(*double),
@@ -698,6 +906,9 @@ impl HatchCommand {
             HatchFill::Pattern(_) => Some(settings.scale.max(1.0e-6) as f32),
             _ => None,
         };
+        self.gradient_colors = settings.gradient_colors;
+        self.commit.draw_order = settings.draw_order.min(4);
+        self.commit.annotative = settings.annotative;
         self.fill = Some(settings.fill);
         self.angle_override = Some(settings.angle_deg.to_radians() as f32);
         self.default_origin = settings.origin;
@@ -726,6 +937,7 @@ impl HatchCommand {
         self.manual_bulges.clear();
         self.manual_arc_mode = false;
         self.manual_arc_midpoint = None;
+        self.manual_arc_three = false;
     }
 
     fn drawn_polyline(&self, closed: bool) -> kernel::geom2d::Polyline {
@@ -743,36 +955,86 @@ impl HatchCommand {
         }
     }
 
+    /// The drawn boundary: points and the bulge of the segment leaving each.
+    fn drawn_loop(&self) -> (Vec<[f64; 2]>, Vec<f64>) {
+        let points = self.manual_pts.iter().map(|p| [p.x, p.y]).collect();
+        let mut bulges = self.manual_bulges.clone();
+        bulges.resize(self.manual_pts.len(), 0.0);
+        (points, bulges)
+    }
+
     /// The drawn boundary with its arcs tessellated.
     fn drawn_ring(&self) -> Vec<[f64; 2]> {
-        let count = self.manual_pts.len();
-        let mut ring = Vec::new();
-        for (index, point) in self.manual_pts.iter().enumerate() {
-            let start = [point.x, point.y];
-            let end = self.manual_pts[(index + 1) % count];
-            let bulge = self.manual_bulges.get(index).copied().unwrap_or(0.0);
-            match kernel::geom2d::BulgeArc::from_bulge(start, [end.x, end.y], bulge)
-                .filter(|_| bulge.abs() > 1.0e-12)
-            {
-                Some(arc) => {
-                    let mut points = arc.tessellate_angle(std::f64::consts::PI / 32.0);
-                    points.pop();
-                    ring.extend(points);
-                }
-                None => ring.push(start),
-            }
-        }
-        ring
+        let (points, bulges) = self.drawn_loop();
+        bulged_ring(&points, &bulges)
     }
 
     /// Path mode: the band the drawn path sweeps at the path width, on the
-    /// alignment's side (Inside = left of the direction of travel).
-    fn path_rings(&self, closed: bool) -> Vec<Vec<[f64; 2]>> {
+    /// alignment's side (Inside = left of the direction of travel). Its
+    /// sides follow the path's lines and arcs; corners between lines are
+    /// mitred and the ends are square at the path's ends.
+    fn path_loops(&self, closed: bool) -> Vec<(Vec<[f64; 2]>, Vec<f64>)> {
         let width = self.prefs.width;
-        let mut source = self.drawn_polyline(closed);
-        if source.vertices.len() < 2 || width <= 0.0 {
+        let (points, mut bulges) = self.drawn_loop();
+        if points.len() < 2 || width <= 0.0 {
             return Vec::new();
         }
+        if !closed {
+            bulges.pop();
+        }
+        let (left, right) = match self.prefs.alignment {
+            1 => (width, 0.0),
+            2 => (0.0, -width),
+            _ => (width * 0.5, -width * 0.5),
+        };
+        let rails = (
+            offset_rail(&points, &bulges, closed, left),
+            offset_rail(&points, &bulges, closed, right),
+        );
+        let (Some(left), Some(right)) = rails else {
+            // ponytail: a rail with a non-tangent arc joint falls back to
+            // the kernel's tessellated band.
+            return self
+                .band_rings(closed)
+                .into_iter()
+                .map(|ring| {
+                    let bulges = vec![0.0; ring.len()];
+                    (ring, bulges)
+                })
+                .collect();
+        };
+        if closed {
+            return vec![left, right];
+        }
+        // Open: up one side, square across the end, back down the other.
+        let (mut points, mut out) = (left.0.clone(), left.1.clone());
+        out.pop();
+        out.push(0.0);
+        let count = right.0.len();
+        for k in (0..count).rev() {
+            points.push(right.0[k]);
+            out.push(if k == 0 { 0.0 } else { -right.1[k - 1] });
+        }
+        let mut ring: (Vec<[f64; 2]>, Vec<f64>) = (Vec::new(), Vec::new());
+        for (point, bulge) in points.into_iter().zip(out) {
+            if ring.0.last().is_some_and(|last: &[f64; 2]| same_point(*last, point)) {
+                *ring.1.last_mut().unwrap() = bulge;
+                continue;
+            }
+            ring.0.push(point);
+            ring.1.push(bulge);
+        }
+        if ring.0.len() > 1 && same_point(ring.0[0], *ring.0.last().unwrap()) {
+            ring.0.pop();
+            ring.1.pop();
+        }
+        vec![ring]
+    }
+
+    /// The kernel's band of the drawn path, its arcs tessellated.
+    fn band_rings(&self, closed: bool) -> Vec<Vec<[f64; 2]>> {
+        let width = self.prefs.width;
+        let mut source = self.drawn_polyline(closed);
         if self.prefs.alignment != 0 {
             let [a, b] = [source.vertices[0].position, source.vertices[1].position];
             let length = (b[0] - a[0]).hypot(b[1] - a[1]);
@@ -807,21 +1069,30 @@ impl HatchCommand {
     /// Hatch the drawn boundary (closed, or Path's open path) and go back to
     /// the start prompt.
     fn finish_drawn(&mut self, closed: bool) -> CmdResult {
-        let hatch = if self.prefs.path {
-            let rings = self.path_rings(closed);
-            if rings.is_empty() {
-                self.reset_drawing();
-                return CmdResult::NeedPoint;
-            }
-            self.make_hatch(rings)
+        // A rectangle drawn at an elevation is hatched in that plane.
+        let plane = self.plane;
+        self.plane.origin += self.plane.z.normalize_or(DVec3::Z) * self.elevation;
+        self.elevation = 0.0;
+        let loops = if self.prefs.path {
+            self.path_loops(closed)
         } else {
-            let mut hatch = self.make_hatch(vec![self.drawn_ring()]);
-            if let Some(path) = self.manual_boundary_path() {
-                hatch.boundary_paths = Some(std::sync::Arc::new(vec![path]));
-            }
-            hatch
+            vec![self.drawn_loop()]
         };
+        let hatch = (!loops.is_empty()).then(|| {
+            let mut hatch = self.make_hatch(loops.iter().map(|(p, b)| bulged_ring(p, b)).collect());
+            hatch.boundary_paths = Some(std::sync::Arc::new(
+                loops.iter().map(|(p, b)| polyline_path(p, b)).collect(),
+            ));
+            hatch
+        });
+        self.plane = plane;
         self.reset_drawing();
+        let Some(hatch) = hatch else {
+            return CmdResult::NeedPoint;
+        };
+        if self.gradient {
+            set_hpname("SOLID");
+        }
         self.step = HatchStep::Main;
         CmdResult::CommitHatchContinue {
             hatch,
@@ -846,6 +1117,7 @@ impl HatchCommand {
                         self.manual_bulges = vec![1.0, 1.0];
                     }
                     codec::EntityType::LwPolyline(polyline) => {
+                        self.elevation = polyline.elevation;
                         self.manual_pts = polyline
                             .vertices
                             .iter()
@@ -885,6 +1157,32 @@ impl HatchCommand {
         };
         self.shape = Some(shape);
         modes.map_or(CmdResult::NeedPoint, CmdResult::ReportMeasurement)
+    }
+
+    /// The direction the drawn path leaves its last point in: along the last
+    /// line, or along the last arc's end tangent (+X before any segment).
+    fn end_direction(&self) -> DVec3 {
+        let n = self.manual_pts.len();
+        if n < 2 {
+            return DVec3::X;
+        }
+        let chord = (self.manual_pts[n - 1] - self.manual_pts[n - 2]).normalize_or(DVec3::X);
+        let half_sweep = 2.0 * self.manual_bulges.get(n - 2).copied().unwrap_or(0.0).atan();
+        let (sin, cos) = half_sweep.sin_cos();
+        DVec3::new(chord.x * cos - chord.y * sin, chord.x * sin + chord.y * cos, 0.0)
+    }
+
+    /// An arc from the last point to `end`, tangent to the path there.
+    fn add_tangent_arc(&mut self, end: DVec3) {
+        let Some(&start) = self.manual_pts.last() else {
+            return;
+        };
+        let direction = self.end_direction();
+        let chord = end - start;
+        let turn = (direction.x * chord.y - direction.y * chord.x)
+            .atan2(direction.x * chord.x + direction.y * chord.y);
+        self.manual_bulges.push((turn * 0.5).tan());
+        self.manual_pts.push(end);
     }
 
     /// The next point `distance` along the last segment (+X after the start).
@@ -991,7 +1289,11 @@ impl HatchCommand {
         }
         if let Some((source, _, _)) = &self.inherited {
             let (name, mut pattern) = match &self.fill {
-                Some(fill) => fill_pattern(fill, self.angle_override.unwrap_or(0.0).to_degrees()),
+                Some(fill) => fill_pattern(
+                    fill,
+                    self.angle_override.unwrap_or(0.0).to_degrees(),
+                    &self.gradient_colors,
+                ),
                 None => (source.name.clone(), source.pattern.clone()),
             };
             let angle = self.angle_override.unwrap_or(source.angle_offset);
@@ -1041,7 +1343,11 @@ impl HatchCommand {
             };
         }
         let (name, mut pattern) =
-            fill_pattern(&self.current_fill(), self.angle_override.unwrap_or(0.0).to_degrees());
+            fill_pattern(
+                &self.current_fill(),
+                self.angle_override.unwrap_or(0.0).to_degrees(),
+                &self.gradient_colors,
+            );
         let angle = self.angle_override.unwrap_or(0.0);
         let scale = self.scale_override.unwrap_or(1.0).max(1.0e-6);
         if let (HatchPattern::Pattern(families), Some(anchor)) =
@@ -1056,8 +1362,8 @@ impl HatchCommand {
             }
         }
         // GFCLR1 (blue) for a gradient fill, as the reference starts with.
-        let color = if self.gradient || matches!(self.fill, Some(HatchFill::Gradient(..))) {
-            [0.0, 0.0, 1.0, 0.80]
+        let color = if matches!(pattern, HatchPattern::Gradient { .. }) {
+            color_rgba(&self.gradient_colors[0], 0.80)
         } else {
             [0.75, 0.75, 0.75, 0.85]
         };
@@ -1089,32 +1395,6 @@ impl HatchCommand {
             style: self.island_style,
             draw_depth: 0.0,
         }
-    }
-
-    fn manual_boundary_path(&self) -> Option<codec::entities::BoundaryPath> {
-        use codec::entities::{BoundaryEdge, BoundaryPath, PolylineEdge};
-        use codec::types::Vector3;
-        if self.manual_pts.len() < 2 {
-            return None;
-        }
-        let vertices = self
-            .manual_pts
-            .iter()
-            .enumerate()
-            .map(|(index, point)| {
-                Vector3::new(
-                    point.x,
-                    point.y,
-                    self.manual_bulges.get(index).copied().unwrap_or(0.0),
-                )
-            })
-            .collect();
-        let mut path = BoundaryPath::new();
-        path.add_edge(BoundaryEdge::Polyline(PolylineEdge {
-            vertices,
-            is_closed: true,
-        }));
-        Some(path)
     }
 }
 
@@ -1183,10 +1463,14 @@ impl CadCommand for HatchCommand {
                         }
                     }
                     HatchMode::Manual if self.manual_arc_mode => {
-                        if self.manual_arc_midpoint.is_none() {
-                            crate::tr!("hatch-cmd", "arc-second")
-                        } else {
+                        if self.manual_arc_midpoint.is_some() {
                             crate::tr!("hatch-cmd", "arc-end")
+                        } else if self.manual_arc_three {
+                            crate::tr!("hatch-cmd", "arc-second")
+                        } else if self.manual_pts.len() >= 2 {
+                            crate::tr!("hatch-cmd", "arc-endpoint-close")
+                        } else {
+                            crate::tr!("hatch-cmd", "arc-endpoint")
                         }
                     }
                     HatchMode::Manual => {
@@ -1260,7 +1544,17 @@ impl CadCommand for HatchCommand {
                     options
                 }
                 HatchMode::Manual if self.manual_arc_mode => {
-                    vec![CmdOption::new("Line", "L"), CmdOption::new("Undo", "U")]
+                    if self.manual_arc_three {
+                        return Vec::new();
+                    }
+                    let mut options = Vec::new();
+                    if self.manual_pts.len() >= 2 {
+                        options.push(CmdOption::new("CLose", "CL"));
+                    }
+                    options.push(CmdOption::new("Line", "L"));
+                    options.push(CmdOption::new("Second pt", "S"));
+                    options.push(CmdOption::new("Undo", "U"));
+                    options
                 }
                 HatchMode::Manual => {
                     let mut options = Vec::new();
@@ -1353,8 +1647,11 @@ impl CadCommand for HatchCommand {
                     self.manual_bulges
                         .push(arc_bulge(start, middle, pt).unwrap_or(0.0));
                     self.manual_pts.push(pt);
-                } else {
+                    self.manual_arc_three = false;
+                } else if self.manual_arc_three {
                     self.manual_arc_midpoint = Some(pt);
+                } else {
+                    self.add_tangent_arc(pt);
                 }
                 CmdResult::NeedPoint
             }
@@ -1399,7 +1696,10 @@ impl CadCommand for HatchCommand {
             HatchStep::Main => {}
         }
         if self.mode == HatchMode::Manual {
-            if self.manual_arc_midpoint.is_some() {
+            if self.manual_arc_mode {
+                self.manual_arc_mode = false;
+                self.manual_arc_three = false;
+                self.manual_arc_midpoint = None;
                 return CmdResult::NeedPoint;
             }
             if !self.manual_pts.is_empty() {
@@ -1411,6 +1711,9 @@ impl CadCommand for HatchCommand {
             }
         }
         let rings = self.combined_rings();
+        if self.gradient && !rings.is_empty() {
+            set_hpname("SOLID");
+        }
         let entity_style = self
             .inherited
             .as_ref()
@@ -1472,7 +1775,7 @@ impl CadCommand for HatchCommand {
     }
 
     fn hatch_commit_options(&self) -> Option<HatchCommitOptions> {
-        Some(self.commit.clone()).filter(|options| *options != HatchCommitOptions::default())
+        Some(self.commit.clone())
     }
 
     fn point_step_accepts_keywords(&self) -> bool {
@@ -1546,7 +1849,7 @@ impl CadCommand for HatchCommand {
         let mut rings = self.combined_rings();
         if self.mode == HatchMode::Manual && self.shape.is_none() {
             if self.prefs.path {
-                rings.extend(self.path_rings(false));
+                rings.extend(self.path_loops(false).iter().map(|(p, b)| bulged_ring(p, b)));
             } else if self.manual_pts.len() >= 3 {
                 rings.push(self.drawn_ring());
             }
@@ -1691,8 +1994,19 @@ impl CadCommand for HatchCommand {
                     }
                     "L" | "LINE" if self.manual_arc_mode => {
                         self.manual_arc_mode = false;
+                        self.manual_arc_three = false;
                         self.manual_arc_midpoint = None;
                         Some(CmdResult::NeedPoint)
+                    }
+                    "S" | "SECOND" if self.manual_arc_mode && !self.manual_arc_three => {
+                        self.manual_arc_three = true;
+                        Some(CmdResult::NeedPoint)
+                    }
+                    "CL" | "CLOSE" if self.manual_arc_mode && self.manual_pts.len() >= 2 => {
+                        let first = self.manual_pts[0];
+                        self.add_tangent_arc(first);
+                        self.manual_pts.pop();
+                        Some(self.finish_drawn(true))
                     }
                     "L" | "LENGTH" => {
                         self.step = HatchStep::Length;
@@ -1703,6 +2017,8 @@ impl CadCommand for HatchCommand {
                     }
                     "U" | "UNDO" => Some(self.undo_drawn_point()),
                     "E" | "EXIT" if !self.manual_arc_mode => Some(self.on_enter()),
+                    // Angle, CEnter, Direction and Radius are not offered.
+                    _ if self.manual_arc_mode && !typed_point => Some(point_or_keyword()),
                     _ => None,
                 }
             }

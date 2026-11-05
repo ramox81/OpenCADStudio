@@ -1198,11 +1198,22 @@ impl OpenCADStudio {
                         .iter()
                         .filter_map(|h| self.tabs[i].scene.document.get_entity_arc(*h))
                         .collect();
+                    // Erasing an associative hatch drops its link to its boundary.
+                    let associative_hatch = handles.iter().any(|h| {
+                        matches!(
+                            self.tabs[i].scene.document.get_entity(*h),
+                            Some(codec::EntityType::Hatch(hatch)) if hatch.is_associative
+                        )
+                    });
                     self.tabs[i].scene.erase_entities(&handles);
                     self.tabs[i].dirty = true;
                     self.refresh_properties();
                     self.command_line
                         .push_output(crate::tf!("{n} object(s) erased.").as_ref());
+                    if associative_hatch {
+                        self.command_line
+                            .push_output(&crate::tr!("hatch-cmd", "associativity-removed"));
+                    }
                     if let Some(pd) = pending {
                         self.commit_undo_delta(i, pd);
                     }

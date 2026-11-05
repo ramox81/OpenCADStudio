@@ -788,6 +788,7 @@ const SYSTEM_VARIABLES: &[&str] = &[
     "CTAB",
     "CTABLESTYLE",
     "CURSORSIZE",
+    "HPNAME",
     "CURSORTYPE",
     "DELOBJ",
     "DGNFRAME",

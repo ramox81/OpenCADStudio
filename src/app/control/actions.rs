@@ -3162,8 +3162,9 @@ impl OpenCADStudio {
             // "spacing=<n>", "double=on|off", "origin_x=<n>", "origin_y=<n>",
             // "associative=on|off", "separate=on|off", "keep=on|off",
             // "island=normal|outer|ignore", "gap=<n>", "layer=<name>",
-            // "transparency=<0-90 or empty>", "pick", "select", "ok" or
-            // "cancel".
+            // "transparency=<0-90 or empty>", "color1=<label>",
+            // "color2=<label>", "draw_order=<0-4 or label>",
+            // "annotative=on|off", "pick", "select", "ok" or "cancel".
             "hatch_settings_dialog" => {
                 use crate::ui::window::hatch_dialogs::HatchDialogMsg as H;
                 if !self.focus_dialog(crate::app::ModalKind::HatchSettings) {
@@ -3206,6 +3207,16 @@ impl OpenCADStudio {
                     "gap" => H::Gap(text),
                     "layer" => H::Layer(text),
                     "transparency" => H::Transparency(text),
+                    "color1" => H::GradientColor1(text),
+                    "color2" => H::GradientColor2(text),
+                    "draw_order" => H::DrawOrder(
+                        value
+                            .parse::<usize>()
+                            .ok()
+                            .and_then(|k| crate::ui::window::hatch_dialogs::draw_order_labels().get(k).cloned())
+                            .unwrap_or(text),
+                    ),
+                    "annotative" => H::Annotative(on),
                     "pick" => H::Boundary(0),
                     "select" => H::Boundary(1),
                     "ok" => H::Ok,

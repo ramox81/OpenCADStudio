@@ -3142,6 +3142,7 @@ pub(super) fn message_attribute(source: &str) -> Option<(&'static str, &'static 
         "RECT  Specify opposite corner:" => Some(("draw", "rect-specify-opposite-corner")),
         "RECT  Specify rectangle area:" => Some(("draw", "rect-specify-rectangle-area")),
         "RECT  Specify first point:" => Some(("draw", "rect-specify-first-point")),
+        "Cannot set HPNAME to that value." => Some(("hatch-cmd", "hpname-invalid")),
         "RECT  Specify second point:" => Some(("draw", "rect-specify-second-point")),
         "RECT  Specify rectangle length:" => Some(("draw", "rect-specify-rectangle-length")),
         "RECT  Specify rectangle width:" => Some(("draw", "rect-specify-rectangle-width")),
