@@ -1325,7 +1325,18 @@ impl CadCommand for HatchCommand {
                         };
                         CmdResult::ReportMeasurement(report)
                     }
-                    None => CmdResult::HatchBoundaryMissed,
+                    // The search still reports its first steps, without islands.
+                    None => CmdResult::HatchBoundaryMissed(if self.analyzed {
+                        String::new()
+                    } else {
+                        [
+                            crate::tr!("hatch-cmd", "selecting"),
+                            crate::tr!("hatch-cmd", "selecting-visible"),
+                            crate::tr!("hatch-cmd", "analyzing-data"),
+                        ]
+                        .join("
+")
+                    }),
                 }
             }
             HatchMode::SelectObjects => CmdResult::NeedPoint,
@@ -1510,7 +1521,7 @@ impl CadCommand for HatchCommand {
             return CmdResult::Cancel;
         }
         if self.set_object_selection(handles) {
-            CmdResult::HatchBoundaryMissed
+            CmdResult::HatchBoundaryMissed(String::new())
         } else {
             CmdResult::NeedPoint
         }

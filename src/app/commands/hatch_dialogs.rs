@@ -31,7 +31,10 @@ impl OpenCADStudio {
 
     /// A pick or selection with no closed boundary: the warning window, or
     /// once it is turned off the message; the prompt comes back either way.
-    pub(in crate::app) fn hatch_boundary_missed(&mut self) {
+    pub(in crate::app) fn hatch_boundary_missed(&mut self, lead: String) {
+        for line in lead.lines() {
+            self.command_line.push_output(line);
+        }
         let i = self.active_tab;
         let gap = self.tabs[i]
             .active_cmd
@@ -39,9 +42,9 @@ impl OpenCADStudio {
             .and_then(|command| command.hatch_gap_tolerance())
             .unwrap_or(0.0);
         if self.hatch_boundary_warning_off {
-            let _ = self.apply_cmd_result(crate::command::CmdResult::ReportError(
-                crate::tr!("hatch-cmd", "no-boundary"),
-            ));
+            self.command_line
+                .push_output(&crate::tr!("hatch-cmd", "no-valid-boundary"));
+            self.hatch_reprompt();
             return;
         }
         self.hatch_boundary_warning = Some(BoundaryWarningState {
@@ -104,6 +107,9 @@ impl OpenCADStudio {
                 self.save_config();
             }
         }
+        // After the window the search's verdict is printed, then the prompt.
+        self.command_line
+            .push_output(&crate::tr!("hatch-cmd", "no-valid-boundary"));
         self.hatch_reprompt();
     }
 

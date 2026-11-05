@@ -8645,6 +8645,7 @@ hatch-cmd =
     .analyzing-data = Analyzing the selected data...
     .analyzing-islands = Analyzing internal islands...
     .no-boundary = A closed boundary could not be determined. There might be gaps between the boundary objects, or the boundary objects might be outside of the display area.
+    .no-valid-boundary = Valid hatch boundary not found.
     .positive = Value must be positive and nonzero.
     .numeric = Requires numeric distance or second point.
 

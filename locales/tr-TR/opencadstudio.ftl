@@ -8565,6 +8565,7 @@ hatch-cmd =
     .analyzing-data = Seçilen veriler çözümleniyor...
     .analyzing-islands = İç adalar çözümleniyor...
     .no-boundary = Kapalı bir sınır belirlenemedi. Sınır nesneleri arasında boşluklar olabilir ya da sınır nesneleri görüntü alanının dışında olabilir.
+    .no-valid-boundary = Geçerli tarama sınırı bulunamadı.
     .positive = Değer pozitif ve sıfırdan farklı olmalı.
     .numeric = Sayısal uzaklık veya ikinci nokta gerekir.
 

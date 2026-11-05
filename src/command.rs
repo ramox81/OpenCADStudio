@@ -2078,7 +2078,8 @@ pub enum CmdResult {
     OpenHatchSettings,
     /// A picked point or selection gave no closed boundary: the boundary
     /// warning window (or, once turned off, the message), then the prompt.
-    HatchBoundaryMissed,
+    /// The text is what the search printed first (empty when nothing).
+    HatchBoundaryMissed(String),
     /// Commit one hatch, print `message` and keep the command at its prompt
     /// (HATCH's drawn boundaries).
     CommitHatchContinue {

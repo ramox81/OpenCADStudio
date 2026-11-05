@@ -793,7 +793,7 @@ impl OpenCADStudio {
                 self.handle_commit_hatch_with_boundaries(hatch, boundaries, entity_style);
             }
             CmdResult::OpenHatchSettings => self.open_hatch_settings(),
-            CmdResult::HatchBoundaryMissed => self.hatch_boundary_missed(),
+            CmdResult::HatchBoundaryMissed(lead) => self.hatch_boundary_missed(lead),
             CmdResult::CommitHatchContinue {
                 hatch,
                 entity_style,
