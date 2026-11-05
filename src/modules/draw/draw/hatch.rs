@@ -1671,7 +1671,13 @@ impl CadCommand for HatchCommand {
             if shape.wants_tangent() {
                 return CmdResult::ReportMeasurement(crate::tr!("hatch-cmd", "ttr-requires"));
             }
-            let result = shape.command_mut().on_enter();
+            // Enter at a point the shape needs is no answer: it asks again.
+            let result = match shape.command_mut().on_enter() {
+                CmdResult::Cancel => CmdResult::ReportError(
+                    t!("Point or option keyword required.").into_owned(),
+                ),
+                result => result,
+            };
             return self.finish_shape(result);
         }
         match self.step {
