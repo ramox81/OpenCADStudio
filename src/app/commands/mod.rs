@@ -28,6 +28,7 @@ pub(crate) mod display;
 mod draw;
 mod field;
 mod group_display;
+mod hatch_dialogs;
 mod fileops;
 mod hyperlink;
 pub(crate) use group_display::{group_display_mode, set_group_display_mode};

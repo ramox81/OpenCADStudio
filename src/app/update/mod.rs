@@ -344,6 +344,13 @@ impl OpenCADStudio {
             Some(TableCellWarning) => self.table_cell_warning = None,
             // Cancel drops the typed value; the cell keeps its value and type.
             Some(TableCellEntry) => self.table_cell_entry = None,
+            // Cancel or ✕: the command keeps its settings and asks again.
+            Some(HatchSettings) => {
+                if self.hatch_settings_dialog.take().is_some() {
+                    self.hatch_reprompt();
+                }
+            }
+            Some(HatchBoundaryWarning) => self.close_hatch_boundary_warning(),
             Some(TdsMissingMap) => {
                 if !self.import_dialogs.tds_maps.is_empty() {
                     self.import_dialogs.tds_maps.remove(0);
@@ -2877,6 +2884,7 @@ impl OpenCADStudio {
             }
 
             Message::PdfDialog(message) => self.update_pdf_dialog(message),
+            Message::HatchDialog(message) => self.update_hatch_dialog(message),
             Message::ImportDialog(message) => self.update_import_dialog(message),
             Message::AttdefDialog(message) => self.on_attdef_dialog(message),
             Message::InsertAttrDialog(message) => self.on_insert_attr_dialog(message),

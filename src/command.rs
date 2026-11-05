@@ -2073,6 +2073,12 @@ pub enum CmdResult {
         boundaries: Vec<EntityType>,
         entity_style: Option<(codec::types::Color, codec::types::Transparency)>,
     },
+    /// Open the Hatch Settings window for the running HATCH / GRADIENT; the
+    /// command keeps its prompt.
+    OpenHatchSettings,
+    /// A picked point or selection gave no closed boundary: the boundary
+    /// warning window (or, once turned off, the message), then the prompt.
+    HatchBoundaryMissed,
     /// Commit one hatch, print `message` and keep the command at its prompt
     /// (HATCH's drawn boundaries).
     CommitHatchContinue {
@@ -3809,9 +3815,23 @@ pub trait CadCommand: Send {
         None
     }
 
-    /// The boundary method HATCH was switched to (0 pick internal point,
-    /// 1 select objects, 2 draw), kept for its next start. Default `None`.
-    fn hatch_start_method(&self) -> Option<u8> {
+    /// HATCH / GRADIENT's boundary method and draw mode after a change at a
+    /// prompt, kept for the next start. Default `None`.
+    fn hatch_prefs(&self) -> Option<crate::modules::draw::draw::hatch::HatchPrefs> {
+        None
+    }
+
+    /// The settings the Hatch Settings window opens with. Default `None`.
+    fn hatch_settings(&self) -> Option<crate::modules::draw::draw::hatch::HatchSettings> {
+        None
+    }
+
+    /// The Hatch Settings window's OK.
+    fn apply_hatch_settings(&mut self, _settings: crate::modules::draw::draw::hatch::HatchSettings) {}
+
+    /// What the hatches this command creates take from its settings once
+    /// they exist (layer, colour, transparency, background). Default `None`.
+    fn hatch_commit_options(&self) -> Option<crate::modules::draw::draw::hatch::HatchCommitOptions> {
         None
     }
 

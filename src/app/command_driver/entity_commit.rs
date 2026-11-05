@@ -846,14 +846,65 @@ impl OpenCADStudio {
         None
     }
 
+    /// The layer a hatch of the running command goes on, and what its
+    /// settings change on the entity once it exists.
+    fn hatch_commit_layer(
+        &self,
+        i: usize,
+    ) -> (String, Option<crate::modules::draw::draw::hatch::HatchCommitOptions>) {
+        let options = self.tabs[i]
+            .active_cmd
+            .as_ref()
+            .and_then(|command| command.hatch_commit_options());
+        let layer = options
+            .as_ref()
+            .and_then(|options| options.layer.clone())
+            .filter(|layer| self.tabs[i].scene.document.layers.get(layer).is_some())
+            .unwrap_or_else(|| self.tabs[i].active_layer.clone());
+        (layer, options)
+    }
+
+    /// Colour, transparency, background and user-defined pattern from the
+    /// Hatch Settings window, written to the new hatch entity.
+    fn apply_hatch_commit_options(
+        &mut self,
+        i: usize,
+        handle: codec::Handle,
+        options: Option<&crate::modules::draw::draw::hatch::HatchCommitOptions>,
+    ) {
+        let Some(options) = options else {
+            return;
+        };
+        let Some(codec::EntityType::Hatch(mut hatch)) =
+            self.tabs[i].scene.document.get_entity(handle).cloned()
+        else {
+            return;
+        };
+        if let Some(color) = &options.color {
+            hatch.common.color = color.clone();
+        }
+        if let Some(percent) = options.transparency {
+            hatch.common.transparency = codec::types::Transparency::from_percent(percent as f64);
+        }
+        if let Some(background) = &options.background {
+            crate::entities::hatch::set_background_color(&mut hatch, background);
+        }
+        if let Some(double) = options.user_double {
+            hatch.pattern_type = codec::entities::HatchPatternType::UserDefined;
+            hatch.is_double = double;
+        }
+        self.tabs[i].scene.update_entity(codec::EntityType::Hatch(hatch));
+    }
+
     pub(super) fn handle_commit_hatch(&mut self, hatch: crate::scene::HatchModel) {
         let perf_started = crate::perf::enabled().then(iced::time::Instant::now);
         let boundary_vertices = hatch.boundary.len();
         let i = self.active_tab;
         let label = self.history_label_from_active_cmd(i, "HATCH");
         let pending = self.begin_undo(i, label, 1, true);
-        let layer = self.tabs[i].active_layer.clone();
+        let (layer, hatch_options) = self.hatch_commit_layer(i);
         let new_handle = self.tabs[i].scene.add_hatch(hatch, Some(&layer), None);
+        self.apply_hatch_commit_options(i, new_handle, hatch_options.as_ref());
         if !new_handle.is_null() {
             self.tabs[i].scene.select_entity(new_handle, true);
         }
@@ -885,11 +936,12 @@ impl OpenCADStudio {
         let i = self.active_tab;
         let label = self.history_label_from_active_cmd(i, "HATCH");
         let pending = self.begin_undo(i, label, 1, true);
-        let layer = self.tabs[i].active_layer.clone();
+        let (layer, hatch_options) = self.hatch_commit_layer(i);
         let new_handle =
             self.tabs[i]
                 .scene
                 .add_hatch(hatch, Some(&layer), Some((color, transparency)));
+        self.apply_hatch_commit_options(i, new_handle, hatch_options.as_ref());
         if !new_handle.is_null() {
             self.tabs[i].scene.select_entity(new_handle, true);
         }
@@ -937,10 +989,11 @@ impl OpenCADStudio {
             }
         }
         hatch.boundary_sources = Some(std::sync::Arc::new(sources));
-        let layer = self.tabs[i].active_layer.clone();
+        let (layer, hatch_options) = self.hatch_commit_layer(i);
         let new_handle = self.tabs[i]
             .scene
             .add_hatch(hatch, Some(&layer), entity_style);
+        self.apply_hatch_commit_options(i, new_handle, hatch_options.as_ref());
         if !new_handle.is_null() {
             self.tabs[i].scene.select_entity(new_handle, true);
         }
@@ -971,8 +1024,9 @@ impl OpenCADStudio {
         let i = self.active_tab;
         let label = self.history_label_from_active_cmd(i, "HATCH");
         let pending = self.begin_undo(i, label, 1, true);
-        let layer = self.tabs[i].active_layer.clone();
-        self.tabs[i].scene.add_hatch(hatch, Some(&layer), entity_style);
+        let (layer, hatch_options) = self.hatch_commit_layer(i);
+        let new_handle = self.tabs[i].scene.add_hatch(hatch, Some(&layer), entity_style);
+        self.apply_hatch_commit_options(i, new_handle, hatch_options.as_ref());
         self.tabs[i].dirty = true;
         if let Some(pd) = pending {
             self.commit_undo_delta(i, pd);
@@ -998,12 +1052,13 @@ impl OpenCADStudio {
         let i = self.active_tab;
         let label = self.history_label_from_active_cmd(i, "HATCH");
         let pending = self.begin_undo(i, label, hatches.len(), true);
-        let layer = self.tabs[i].active_layer.clone();
+        let (layer, hatch_options) = self.hatch_commit_layer(i);
         for hatch in hatches {
             let new_handle =
                 self.tabs[i]
                     .scene
                     .add_hatch(hatch, Some(&layer), entity_style.clone());
+            self.apply_hatch_commit_options(i, new_handle, hatch_options.as_ref());
             if !new_handle.is_null() {
                 self.tabs[i].scene.select_entity(new_handle, true);
             }

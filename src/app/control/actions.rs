@@ -151,6 +151,8 @@ pub(super) const NAMES: &[&str] = &[
     "tds_import_dialog",
     "tds_material_dialog",
     "tds_map_dialog",
+    "hatch_settings_dialog",
+    "hatch_boundary_warning",
     "extraction_outdated",
     "print_all",
     "data_link_manager",
@@ -3151,6 +3153,79 @@ impl OpenCADStudio {
                     _ if spec == "print" => Message::PrintAllPrint,
                     _ if spec == "close" => Message::CloseModal,
                     _ => return Err(failure("invalid_value", spec)),
+                }
+            }
+            // The Hatch Settings window of a running HATCH / GRADIENT, one
+            // edit per call: "kind=solid|gradient|pattern|user",
+            // "pattern=<name>", "gradient=<label>", "color=<label>",
+            // "background=<label>", "angle=<deg>", "scale=<n>",
+            // "spacing=<n>", "double=on|off", "origin_x=<n>", "origin_y=<n>",
+            // "associative=on|off", "separate=on|off", "keep=on|off",
+            // "island=normal|outer|ignore", "gap=<n>", "layer=<name>",
+            // "transparency=<0-90 or empty>", "pick", "select", "ok" or
+            // "cancel".
+            "hatch_settings_dialog" => {
+                use crate::ui::window::hatch_dialogs::HatchDialogMsg as H;
+                if !self.focus_dialog(crate::app::ModalKind::HatchSettings) {
+                    return Err(failure("no_dialog", "The Hatch Settings window is not open"));
+                }
+                let spec = string(req, "value")?;
+                let (key, value) = spec.split_once('=').unwrap_or((spec, ""));
+                let on = matches!(value, "on" | "1" | "true");
+                let text = value.to_string();
+                if key == "cancel" {
+                    return Ok(Task::done(Message::CloseModal));
+                }
+                let message = match key {
+                    "kind" => H::Kind(match value {
+                        "solid" => 0,
+                        "gradient" => 1,
+                        "pattern" => 2,
+                        "user" => 3,
+                        _ => return Err(failure("invalid_value", spec)),
+                    }),
+                    "pattern" => H::Pattern(text),
+                    "gradient" => H::Gradient(text),
+                    "color" => H::Color(text),
+                    "background" => H::Background(text),
+                    "angle" => H::Angle(text),
+                    "scale" => H::Scale(text),
+                    "spacing" => H::Spacing(text),
+                    "double" => H::Double(on),
+                    "origin_x" => H::OriginX(text),
+                    "origin_y" => H::OriginY(text),
+                    "associative" => H::Associative(on),
+                    "separate" => H::Separate(on),
+                    "keep" => H::Keep(on),
+                    "island" => H::Island(match value {
+                        "normal" => 0,
+                        "outer" => 1,
+                        "ignore" => 2,
+                        _ => return Err(failure("invalid_value", spec)),
+                    }),
+                    "gap" => H::Gap(text),
+                    "layer" => H::Layer(text),
+                    "transparency" => H::Transparency(text),
+                    "pick" => H::Boundary(0),
+                    "select" => H::Boundary(1),
+                    "ok" => H::Ok,
+                    _ => return Err(failure("invalid_value", spec)),
+                };
+                Message::HatchDialog(message)
+            }
+            // The boundary warning of an empty-area HATCH pick: "details",
+            // "dont_show" (ticks "Do not show this message again"), "close".
+            "hatch_boundary_warning" => {
+                use crate::ui::window::hatch_dialogs::HatchDialogMsg as H;
+                if !self.focus_dialog(crate::app::ModalKind::HatchBoundaryWarning) {
+                    return Err(failure("no_dialog", "The hatch boundary warning is not open"));
+                }
+                let state = self.hatch_boundary_warning.clone().unwrap_or_default();
+                match string(req, "value")? {
+                    "details" => Message::HatchDialog(H::WarningDetails(!state.details)),
+                    "dont_show" => Message::HatchDialog(H::WarningDontShow(true)),
+                    "close" => Message::HatchDialog(H::WarningClose),
+                    other => return Err(failure("invalid_value", other)),
                 }
             }
             "tds_map_dialog" => {

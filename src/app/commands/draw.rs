@@ -976,7 +976,7 @@ impl OpenCADStudio {
                     .with_origin(self.tabs[i].scene.document.hatch_origin())
                     .with_associative(self.hatch_associative)
                     .with_gap_tolerance(self.hatch_gap_tolerance)
-                    .with_start_method(self.hatch_start_method);
+                    .with_prefs(self.hatch_prefs);
                 if let Some(message) = new_cmd.start_message() {
                     self.command_line.push_output(&message);
                 }
@@ -1046,17 +1046,25 @@ impl OpenCADStudio {
             }
 
             "GRADIENT" => {
-                use crate::modules::draw::draw::hatch::GradientCommand;
+                use crate::modules::draw::draw::hatch::HatchCommand;
                 let plane = crate::command::WorkingPlane::default();
                 let mut boundary_sources =
                     self.tabs[i].scene.boundary_sources_on_plane(plane, 1.0e-6);
                 self.tabs[i]
                     .scene
                     .retain_sources_on_screen(&mut boundary_sources, plane);
-                let new_cmd = GradientCommand::new(boundary_sources)
-                    .with_gap_tolerance(self.hatch_gap_tolerance);
+                let new_cmd = HatchCommand::new(boundary_sources, Vec::new(), None, plane)
+                    .gradient()
+                    .with_origin(self.tabs[i].scene.document.hatch_origin())
+                    .with_associative(self.hatch_associative)
+                    .with_gap_tolerance(self.hatch_gap_tolerance)
+                    .with_prefs(self.hatch_prefs);
+                if let Some(message) = new_cmd.start_message() {
+                    self.command_line.push_output(&message);
+                }
                 self.command_line.push_info(&new_cmd.prompt());
                 self.tabs[i].active_cmd = Some(Box::new(new_cmd));
+                self.refresh_area_preview(i);
             }
 
             "BOUNDARY" => {
