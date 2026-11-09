@@ -6878,7 +6878,9 @@ pub(crate) fn text_box(dim: &Dimension, document: &Document) -> Option<(Vector3,
     let scale = if style.dimscale > 1e-9 { style.dimscale } else { 1.0 };
     let height = style.dimtxt * scale;
     let width = dimension_text_width(dim, Some(&style), height, Some(document));
-    Some((dim.base().text_middle_point, width, height))
+    // An automatic text point is not stored (#1412): use where it draws.
+    let middle = stored_text_point(dim).or_else(|| automatic_text_position(document, dim))?;
+    Some((middle, width, height))
 }
 
 /// The width of a dimension's text as it draws: the extent of its ink in
