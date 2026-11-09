@@ -122,6 +122,12 @@ impl OpenCADStudio {
         if outermost {
             self.tabs[i].scene.constraint_network_moves.clear();
         }
+        // The command's base point for the step just handled (ARC's centre
+        // while its start is given): relative input and LASTPOINT use it,
+        // whichever path (typed, picked, scripted) fed the step.
+        if let Some(base) = self.tabs[i].active_cmd.as_mut().and_then(|c| c.take_last_point()) {
+            self.last_point = Some(base);
+        }
         let panel_updates = self.tabs[i]
             .active_cmd
             .as_mut()
