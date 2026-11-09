@@ -1985,7 +1985,7 @@ impl CadCommand for ArcCommand {
                 // A pick gives the included angle as its direction from the
                 // start point, as the reference reads it.
                 ArcStep::AngleSE { s, e } => {
-                    let mut included = angle_xy(s, pt, self.plane);
+                    let mut included = angle_xy(s, pt, self.plane).rem_euclid(TAU);
                     if self.cw {
                         included = -included;
                     }
@@ -2266,7 +2266,7 @@ impl CadCommand for ArcCommand {
             ArcStep::AngleSE { s, e } => self
                 .preview(
                     {
-                        let included = angle_xy(s, pt, self.plane);
+                        let included = angle_xy(s, pt, self.plane).rem_euclid(TAU);
                         arc_from_endpoints_angle(
                             s,
                             e,
