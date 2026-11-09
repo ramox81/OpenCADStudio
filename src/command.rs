@@ -3634,6 +3634,15 @@ pub trait CadCommand: Send {
         false
     }
 
+    /// The point relative input (`@`) and LASTPOINT refer to after the step
+    /// just handled, when that is not the point just entered: a prompt with
+    /// a rubber band starts from its base point (ARC's end prompt from the
+    /// centre, not from the start point given last), and an angle or length
+    /// answered with a point leaves that base. Taken once.
+    fn take_last_point(&mut self) -> Option<DVec3> {
+        None
+    }
+
     /// Current drawing-persisted SKETCH settings.
     fn sketch_settings(&self) -> Option<(i16, f64, f64)> {
         None

@@ -1014,6 +1014,9 @@ impl OpenCADStudio {
                 StepInput::Escape => Some(cmd.on_escape()),
             };
             let updates = cmd.take_pending_panel_updates();
+            if let Some(base) = cmd.take_last_point() {
+                self.last_point = Some(base);
+            }
             (res, updates)
         };
         for (panel_id, values) in panel_updates {
@@ -1645,7 +1648,7 @@ impl OpenCADStudio {
         Some(
             match (
                 matches!(kind, crate::app::helpers::CoordKind::Relative),
-                self.last_point,
+                self.last_point.or(self.last_entered_point),
             ) {
                 (true, Some(base)) => {
                     base + match ucs {

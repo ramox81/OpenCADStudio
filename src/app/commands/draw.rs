@@ -564,65 +564,25 @@ impl OpenCADStudio {
                 self.command_line.push_info(&new_cmd.prompt());
                 self.tabs[i].active_cmd = Some(Box::new(new_cmd));
             }
-            "ARC_3P" => {
-                use crate::modules::draw::draw::arc::Arc3PCommand;
-                let new_cmd = Arc3PCommand::new();
-                self.command_line.push_info(&new_cmd.prompt());
-                self.tabs[i].active_cmd = Some(Box::new(new_cmd));
-            }
-            "ARC_CSE" => {
-                use crate::modules::draw::draw::arc::ArcCSECommand;
-                let new_cmd = ArcCSECommand::new();
-                self.command_line.push_info(&new_cmd.prompt());
-                self.tabs[i].active_cmd = Some(Box::new(new_cmd));
-            }
-            "ARC_SCE" => {
-                use crate::modules::draw::draw::arc::ArcSCECommand;
-                let new_cmd = ArcSCECommand::new();
-                self.command_line.push_info(&new_cmd.prompt());
-                self.tabs[i].active_cmd = Some(Box::new(new_cmd));
-            }
-            "ARC_SCA" => {
-                use crate::modules::draw::draw::arc::ArcSCACommand;
-                let new_cmd = ArcSCACommand::new();
-                self.command_line.push_info(&new_cmd.prompt());
-                self.tabs[i].active_cmd = Some(Box::new(new_cmd));
-            }
-            "ARC_SCL" => {
-                use crate::modules::draw::draw::arc::ArcSCLCommand;
-                let new_cmd = ArcSCLCommand::new();
-                self.command_line.push_info(&new_cmd.prompt());
-                self.tabs[i].active_cmd = Some(Box::new(new_cmd));
-            }
-            "ARC_SEA" => {
-                use crate::modules::draw::draw::arc::ArcSEACommand;
-                let new_cmd = ArcSEACommand::new();
-                self.command_line.push_info(&new_cmd.prompt());
-                self.tabs[i].active_cmd = Some(Box::new(new_cmd));
-            }
-            "ARC_SER" => {
-                use crate::modules::draw::draw::arc::ArcSERCommand;
-                let new_cmd = ArcSERCommand::new();
-                self.command_line.push_info(&new_cmd.prompt());
-                self.tabs[i].active_cmd = Some(Box::new(new_cmd));
-            }
-            "ARC_SED" => {
-                use crate::modules::draw::draw::arc::ArcSEDCommand;
-                let new_cmd = ArcSEDCommand::new();
-                self.command_line.push_info(&new_cmd.prompt());
-                self.tabs[i].active_cmd = Some(Box::new(new_cmd));
-            }
-            "ARC_CSA" => {
-                use crate::modules::draw::draw::arc::ArcCSACommand;
-                let new_cmd = ArcCSACommand::new();
-                self.command_line.push_info(&new_cmd.prompt());
-                self.tabs[i].active_cmd = Some(Box::new(new_cmd));
-            }
-            "ARC_CSL" => {
-                use crate::modules::draw::draw::arc::ArcCSLCommand;
-                let new_cmd = ArcCSLCommand::new();
-                self.command_line.push_info(&new_cmd.prompt());
-                self.tabs[i].active_cmd = Some(Box::new(new_cmd));
+            // The ribbon's arc methods are ARC with its options typed in
+            // between the picks, as the reference's menu macros run them
+            // (`_arc \_c \_a`): the same prompts, relative input and
+            // LASTPOINT as typing them.
+            "ARC_3P" | "ARC_SCE" | "ARC_SCA" | "ARC_SCL" | "ARC_SEA" | "ARC_SER" | "ARC_SED"
+            | "ARC_CSE" | "ARC_CSA" | "ARC_CSL" => {
+                let line = match cmd {
+                    "ARC_SCE" => r"ARC \ C",
+                    "ARC_SCA" => r"ARC \ C \ A",
+                    "ARC_SCL" => r"ARC \ C \ L",
+                    "ARC_SEA" => r"ARC \ E \ A",
+                    "ARC_SER" => r"ARC \ E \ R",
+                    "ARC_SED" => r"ARC \ E \ D",
+                    "ARC_CSE" => r"ARC C",
+                    "ARC_CSA" => r"ARC C \ \ A",
+                    "ARC_CSL" => r"ARC C \ \ L",
+                    _ => "ARC",
+                };
+                return Some(self.run_command_line_streaming(line, false));
             }
             "ARC_CONT" => {
                 use crate::modules::draw::draw::arc::{continue_anchor, ArcContCommand};

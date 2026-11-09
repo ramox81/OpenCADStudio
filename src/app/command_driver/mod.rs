@@ -483,6 +483,9 @@ impl OpenCADStudio {
             .filter(|c| c.name() == "FROM")
             .and_then(|c| c.resolved_anchor())
             .or(self.last_point)
+            // LASTPOINT outlives the command that set it: `@` at a new
+            // command's first prompt is relative to it.
+            .or(self.last_entered_point)
     }
 
     /// Apply a command replacement without deleting a one-to-one entity edit.
@@ -1586,7 +1589,12 @@ impl OpenCADStudio {
 
     fn handle_cancel_with_message(&mut self, message: String) -> Task<Message> {
         for line in message.lines() {
-            self.command_line.push_error(line);
+            // `*Invalid*` is the reference's plain refusal line, not an error.
+            if line.len() > 2 && line.starts_with('*') && line.ends_with('*') {
+                self.command_line.push_rejection(line);
+            } else {
+                self.command_line.push_error(line);
+            }
         }
         self.apply_cmd_result(CmdResult::Cancel)
     }

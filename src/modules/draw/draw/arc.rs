@@ -205,7 +205,8 @@ fn arc_from_se_radius(
     clockwise: bool,
     plane: WorkingPlane,
 ) -> Option<(DVec3, f64, f64, f64)> {
-    let radius = plane.to_local(s).distance(plane.to_local(radius_pt));
+    // The radius rubber band runs from the end point.
+    let radius = plane.to_local(e).distance(plane.to_local(radius_pt));
     arc_from_endpoints_radius(s, e, radius, clockwise, plane)
 }
 
@@ -1704,9 +1705,8 @@ pub struct ArcCommand {
     step: ArcStep,
     cw: bool,
     plane: WorkingPlane,
-    /// Last pointer position at the end step: a typed arc length runs from
-    /// the start point towards it.
-    cursor: Option<DVec3>,
+    /// LASTPOINT after the step just handled (see `take_last_point`).
+    last_point: Option<DVec3>,
 }
 
 impl ArcCommand {
@@ -1715,8 +1715,53 @@ impl ArcCommand {
             step: ArcStep::Start,
             cw: false,
             plane: WorkingPlane::default(),
-            cursor: None,
+            last_point: None,
         }
+    }
+
+    /// The point each prompt's rubber band starts from: relative input (`@`)
+    /// at that prompt is read from it, and an angle, length, radius or
+    /// direction answered there leaves LASTPOINT on it (measured on the
+    /// reference for every method; the start point given after the centre
+    /// does not move it).
+    fn base(step: ArcStep) -> Option<DVec3> {
+        match step {
+            ArcStep::Start | ArcStep::CenterFirst => None,
+            ArcStep::Second { s } => Some(s.point()),
+            ArcStep::End3 { m, .. } => Some(m.point()),
+            ArcStep::StartAfterCenter { c }
+            | ArcStep::EndSC { c, .. }
+            | ArcStep::AngleSC { c, .. } => Some(c),
+            ArcStep::CenterAfterStart { s }
+            | ArcStep::LengthSC { s, .. }
+            | ArcStep::EndAfterStart { s }
+            | ArcStep::AngleSE { s, .. }
+            | ArcStep::DirectionSE { s, .. } => Some(s),
+            ArcStep::CenterSE { e, .. } | ArcStep::RadiusSE { e, .. } => Some(e),
+        }
+    }
+
+    /// Records LASTPOINT after a step that left `before`: the next prompt's
+    /// base while the command goes on; once the arc is drawn from an angle,
+    /// length or radius, that prompt's base (from a direction, the end
+    /// point); from a point prompt the point entered stays.
+    fn note_last_point(&mut self, before: ArcStep, result: &CmdResult) {
+        let going_on = matches!(
+            result,
+            CmdResult::NeedPoint | CmdResult::ReportError(_) | CmdResult::NeedPointQuiet
+        );
+        self.last_point = if going_on {
+            Self::base(self.step)
+        } else {
+            match before {
+                ArcStep::AngleSC { .. }
+                | ArcStep::LengthSC { .. }
+                | ArcStep::AngleSE { .. }
+                | ArcStep::RadiusSE { .. } => Self::base(before),
+                ArcStep::DirectionSE { e, .. } => Some(e),
+                _ => None,
+            }
+        };
     }
 
     /// Arc about `c` from `s` towards the direction of `e` (Ctrl flips).
@@ -1762,24 +1807,6 @@ impl ArcCommand {
         } else {
             (c, r, sa, ea)
         })
-    }
-
-    /// Arc about `c` from `s` whose length along the circle is `len`, running
-    /// towards the side of the start point the pointer is on.
-    fn sc_arc_length(&self, s: DVec3, c: DVec3, len: f64) -> Option<(DVec3, f64, f64, f64)> {
-        let r = c.distance(s);
-        if r < 1e-9 || len <= 0.0 || len >= TAU * r {
-            return None;
-        }
-        let toward = self
-            .cursor
-            .map(|cursor| (angle_xy(c, cursor, self.plane) - angle_xy(c, s, self.plane)).rem_euclid(TAU));
-        let ccw = match toward {
-            Some(span) if span > 1e-9 => span <= std::f64::consts::PI,
-            _ => !self.cw,
-        };
-        let span = len / r;
-        self.sc_angle(s, c, if ccw { span } else { -span })
     }
 
     /// Sweep from `s` to the cursor about `c`, going the way Ctrl says.
@@ -1909,161 +1936,185 @@ impl CadCommand for ArcCommand {
         pt: DVec3,
         tangent: Option<TangentObject>,
     ) -> Option<CmdResult> {
-        let pick = match tangent {
-            Some(target) => ArcPick::Tangent { target, hit: pt },
-            None => ArcPick::Point(pt),
-        };
-        match self.step {
-            ArcStep::Start => {
-                self.step = ArcStep::Second { s: pick };
-                Some(CmdResult::NeedPoint)
+        let before = self.step;
+        let result = (|| -> Option<CmdResult> {
+            let pick = match tangent {
+                Some(target) => ArcPick::Tangent { target, hit: pt },
+                None => ArcPick::Point(pt),
+            };
+            match self.step {
+                ArcStep::Start => {
+                    self.step = ArcStep::Second { s: pick };
+                    Some(CmdResult::NeedPoint)
+                }
+                ArcStep::Second { s } => {
+                    self.step = ArcStep::End3 { s, m: pick };
+                    Some(CmdResult::NeedPoint)
+                }
+                ArcStep::End3 { s, m } => match solve_arc_3_inputs(s, m, pick, self.plane) {
+                    Some((c, r, sa, ea)) => Some(arc_result(c, r, sa, ea, self.plane)),
+                    None => Some(CmdResult::NeedPoint),
+                },
+                ArcStep::CenterFirst => {
+                    self.step = ArcStep::StartAfterCenter { c: pt };
+                    Some(CmdResult::NeedPoint)
+                }
+                ArcStep::StartAfterCenter { c } => {
+                    self.step = ArcStep::EndSC { s: pt, c };
+                    Some(CmdResult::NeedPoint)
+                }
+                ArcStep::CenterAfterStart { s } => {
+                    self.step = ArcStep::EndSC { s, c: pt };
+                    Some(CmdResult::NeedPoint)
+                }
+                ArcStep::EndSC { c, .. } if c.distance(pt) < 1e-9 => Some(invalid()),
+                ArcStep::EndSC { s, c } => Some(self.commit(self.sc_end(s, c, pt))),
+                // At a typed prompt a pick reads as commercial solutions do: the cursor's
+                // direction from the centre (angle) or its distance (length,
+                // radius), the cursor itself for a direction / sagitta.
+                ArcStep::AngleSC { s, c } => {
+                    let span = self.cursor_span(s, c, pt);
+                    Some(self.commit(self.sc_angle(s, c, span)))
+                }
+                ArcStep::LengthSC { s, c } => Some(self.commit(self.sc_length(s, c, s.distance(pt)))),
+                ArcStep::EndAfterStart { s } => {
+                    self.step = ArcStep::CenterSE { s, e: pt };
+                    Some(CmdResult::NeedPoint)
+                }
+                ArcStep::CenterSE { s, e } => Some(self.commit(self.sc_end(s, pt, e))),
+                // A pick gives the included angle as its direction from the
+                // start point, as the reference reads it.
+                ArcStep::AngleSE { s, e } => {
+                    let mut included = angle_xy(s, pt, self.plane);
+                    if self.cw {
+                        included = -included;
+                    }
+                    Some(self.commit(arc_from_endpoints_angle(s, e, included, self.plane)))
+                }
+                ArcStep::DirectionSE { s, e } => {
+                    Some(self.commit(arc_continue(s, pt - s, e, self.cw, self.plane)))
+                }
+                ArcStep::RadiusSE { s, e } => {
+                    Some(self.commit(arc_from_se_radius(s, e, pt, self.cw, self.plane)))
+                }
             }
-            ArcStep::Second { s } => {
-                self.step = ArcStep::End3 { s, m: pick };
-                Some(CmdResult::NeedPoint)
-            }
-            ArcStep::End3 { s, m } => match solve_arc_3_inputs(s, m, pick, self.plane) {
-                Some((c, r, sa, ea)) => Some(arc_result(c, r, sa, ea, self.plane)),
-                None => Some(CmdResult::NeedPoint),
-            },
-            ArcStep::CenterFirst => {
-                self.step = ArcStep::StartAfterCenter { c: pt };
-                Some(CmdResult::NeedPoint)
-            }
-            ArcStep::StartAfterCenter { c } => {
-                self.step = ArcStep::EndSC { s: pt, c };
-                Some(CmdResult::NeedPoint)
-            }
-            ArcStep::CenterAfterStart { s } => {
-                self.step = ArcStep::EndSC { s, c: pt };
-                Some(CmdResult::NeedPoint)
-            }
-            ArcStep::EndSC { s, c } if c.distance(pt) < 1e-9 => Some(invalid()),
-            ArcStep::EndSC { s, c } => Some(self.commit(self.sc_end(s, c, pt))),
-            // At a typed prompt a pick reads as commercial solutions do: the cursor's
-            // direction from the centre (angle) or its distance (length,
-            // radius), the cursor itself for a direction / sagitta.
-            ArcStep::AngleSC { s, c } => {
-                let span = self.cursor_span(s, c, pt);
-                Some(self.commit(self.sc_angle(s, c, span)))
-            }
-            ArcStep::LengthSC { s, c } => Some(self.commit(self.sc_length(s, c, s.distance(pt)))),
-            ArcStep::EndAfterStart { s } => {
-                self.step = ArcStep::CenterSE { s, e: pt };
-                Some(CmdResult::NeedPoint)
-            }
-            ArcStep::CenterSE { s, e } => Some(self.commit(self.sc_end(s, pt, e))),
-            ArcStep::AngleSE { s, e } => {
-                Some(self.commit(arc_from_sagitta(s, e, pt, self.cw, self.plane)))
-            }
-            ArcStep::DirectionSE { s, e } => {
-                Some(self.commit(arc_continue(s, pt - s, e, self.cw, self.plane)))
-            }
-            ArcStep::RadiusSE { s, e } => {
-                Some(self.commit(arc_from_se_radius(s, e, pt, self.cw, self.plane)))
-            }
+        
+        })();
+        if let Some(result) = &result {
+            self.note_last_point(before, result);
         }
+        result
+    }
+
+    fn take_last_point(&mut self) -> Option<DVec3> {
+        self.last_point.take()
     }
 
     fn on_text_input(&mut self, text: &str) -> Option<CmdResult> {
-        // A coordinate typed at an angle, length, direction or radius prompt
-        // is a point, read like a pick: the comma is never a decimal mark.
-        if crate::app::helpers::parse_coord(text).is_some() {
-            return None;
-        }
-        let upper = text.trim().to_uppercase();
-        match self.step {
-            ArcStep::Start => match upper.as_str() {
-                "C" | "CE" | "CENTER" | "CENTRE" => {
-                    self.step = ArcStep::CenterFirst;
-                    Some(CmdResult::NeedPoint)
+        let before = self.step;
+        let result = (|| -> Option<CmdResult> {
+            // A coordinate typed at an angle, length, direction or radius prompt
+            // is a point, read like a pick: the comma is never a decimal mark.
+            if crate::app::helpers::parse_coord(text).is_some() {
+                return None;
+            }
+            let upper = text.trim().to_uppercase();
+            match self.step {
+                ArcStep::Start => match upper.as_str() {
+                    "C" | "CE" | "CENTER" | "CENTRE" => {
+                        self.step = ArcStep::CenterFirst;
+                        Some(CmdResult::NeedPoint)
+                    }
+                    _ => None,
+                },
+                ArcStep::Second { s } => match upper.as_str() {
+                    "C" | "CE" | "CENTER" | "CENTRE" => {
+                        self.step = ArcStep::CenterAfterStart { s: s.point() };
+                        Some(CmdResult::NeedPoint)
+                    }
+                    "E" | "END" => {
+                        self.step = ArcStep::EndAfterStart { s: s.point() };
+                        Some(CmdResult::NeedPoint)
+                    }
+                    _ => None,
+                },
+                ArcStep::EndSC { s, c } => match upper.as_str() {
+                    "A" | "ANGLE" => {
+                        self.step = ArcStep::AngleSC { s, c };
+                        Some(CmdResult::NeedPoint)
+                    }
+                    "L" | "LENGTH" => {
+                        self.step = ArcStep::LengthSC { s, c };
+                        Some(CmdResult::NeedPoint)
+                    }
+                    // A bare number is a direct distance from the centre (the
+                    // prompt's base) toward the cursor, as the reference reads it.
+                    _ => None,
+                },
+                ArcStep::CenterSE { s, e } => match upper.as_str() {
+                    "A" | "ANGLE" => {
+                        self.step = ArcStep::AngleSE { s, e };
+                        Some(CmdResult::NeedPoint)
+                    }
+                    "D" | "DIRECTION" => {
+                        self.step = ArcStep::DirectionSE { s, e };
+                        Some(CmdResult::NeedPoint)
+                    }
+                    "R" | "RADIUS" => {
+                        self.step = ArcStep::RadiusSE { s, e };
+                        Some(CmdResult::NeedPoint)
+                    }
+                    _ => None,
+                },
+                ArcStep::AngleSC { s, c } => {
+                    let mut span = Self::typed_angle(text)?;
+                    if self.cw {
+                        span = -span;
+                    }
+                    // A typed included angle counts whole turns off (400 = 40);
+                    // a whole number of turns sweeps nothing.
+                    let turns = span.abs() % TAU;
+                    if turns < 1e-9 || TAU - turns < 1e-9 {
+                        return Some(invalid());
+                    }
+                    Some(self.commit(self.sc_angle(s, c, turns.copysign(span))))
                 }
-                _ => None,
-            },
-            ArcStep::Second { s } => match upper.as_str() {
-                "C" | "CE" | "CENTER" | "CENTRE" => {
-                    self.step = ArcStep::CenterAfterStart { s: s.point() };
-                    Some(CmdResult::NeedPoint)
-                }
-                "E" | "END" => {
-                    self.step = ArcStep::EndAfterStart { s: s.point() };
-                    Some(CmdResult::NeedPoint)
-                }
-                _ => None,
-            },
-            ArcStep::EndSC { s, c } => match upper.as_str() {
-                "A" | "ANGLE" => {
-                    self.step = ArcStep::AngleSC { s, c };
-                    Some(CmdResult::NeedPoint)
-                }
-                "L" | "LENGTH" => {
-                    self.step = ArcStep::LengthSC { s, c };
-                    Some(CmdResult::NeedPoint)
-                }
-                // A bare number is the arc's length along the circle (#1408).
-                _ => {
+                ArcStep::LengthSC { s, c } => {
                     let len = Self::typed_number(text)?;
-                    Some(self.commit(self.sc_arc_length(s, c, len)))
+                    if len == 0.0 {
+                        return Some(CmdResult::ReportError(
+                            t!("Value must be nonzero.").into_owned(),
+                        ));
+                    }
+                    if len.abs() > 2.0 * c.distance(s) {
+                        return Some(invalid());
+                    }
+                    Some(self.commit(self.sc_length(s, c, len)))
                 }
-            },
-            ArcStep::CenterSE { s, e } => match upper.as_str() {
-                "A" | "ANGLE" => {
-                    self.step = ArcStep::AngleSE { s, e };
-                    Some(CmdResult::NeedPoint)
+                ArcStep::AngleSE { s, e } => {
+                    let mut included = Self::typed_angle(text)?;
+                    if self.cw {
+                        included = -included;
+                    }
+                    Some(self.commit(arc_from_endpoints_angle(s, e, included, self.plane)))
                 }
-                "D" | "DIRECTION" => {
-                    self.step = ArcStep::DirectionSE { s, e };
-                    Some(CmdResult::NeedPoint)
+                ArcStep::DirectionSE { s, e } => {
+                    let angle = Self::typed_angle(text)?;
+                    let tangent = self.plane.x * angle.cos() + self.plane.y * angle.sin();
+                    Some(self.commit(arc_continue(s, tangent, e, self.cw, self.plane)))
                 }
-                "R" | "RADIUS" => {
-                    self.step = ArcStep::RadiusSE { s, e };
-                    Some(CmdResult::NeedPoint)
+                ArcStep::RadiusSE { s, e } => {
+                    let r = Self::typed_number(text)?;
+                    Some(self.commit(arc_from_endpoints_radius(s, e, r, self.cw, self.plane)))
                 }
                 _ => None,
-            },
-            ArcStep::AngleSC { s, c } => {
-                let mut span = Self::typed_angle(text)?;
-                if self.cw {
-                    span = -span;
-                }
-                // A typed included angle counts whole turns off (400 = 40);
-                // a whole number of turns sweeps nothing.
-                let turns = span.abs() % TAU;
-                if turns < 1e-9 || TAU - turns < 1e-9 {
-                    return Some(invalid());
-                }
-                Some(self.commit(self.sc_angle(s, c, turns.copysign(span))))
             }
-            ArcStep::LengthSC { s, c } => {
-                let len = Self::typed_number(text)?;
-                if len == 0.0 {
-                    return Some(CmdResult::ReportError(
-                        t!("Value must be nonzero.").into_owned(),
-                    ));
-                }
-                if len.abs() > 2.0 * c.distance(s) {
-                    return Some(invalid());
-                }
-                Some(self.commit(self.sc_length(s, c, len)))
-            }
-            ArcStep::AngleSE { s, e } => {
-                let mut included = Self::typed_angle(text)?;
-                if self.cw {
-                    included = -included;
-                }
-                Some(self.commit(arc_from_endpoints_angle(s, e, included, self.plane)))
-            }
-            ArcStep::DirectionSE { s, e } => {
-                let angle = Self::typed_angle(text)?;
-                let tangent = self.plane.x * angle.cos() + self.plane.y * angle.sin();
-                Some(self.commit(arc_continue(s, tangent, e, self.cw, self.plane)))
-            }
-            ArcStep::RadiusSE { s, e } => {
-                let r = Self::typed_number(text)?;
-                Some(self.commit(arc_from_endpoints_radius(s, e, r, self.cw, self.plane)))
-            }
-            _ => None,
+        
+        })();
+        if let Some(result) = &result {
+            self.note_last_point(before, result);
         }
+        result
     }
 
     fn on_enter(&mut self) -> CmdResult {
@@ -2194,7 +2245,6 @@ impl CadCommand for ArcCommand {
                     .collect()
             }
             ArcStep::EndSC { s, c } => {
-                self.cursor = Some(pt);
                 self.preview(self.sc_end(s, c, pt), line_wire(c, pt))
                     .into_iter()
                     .collect()
@@ -2215,8 +2265,16 @@ impl CadCommand for ArcCommand {
                 .collect(),
             ArcStep::AngleSE { s, e } => self
                 .preview(
-                    arc_from_sagitta(s, e, pt, self.cw, self.plane),
-                    line_wire(s, e),
+                    {
+                        let included = angle_xy(s, pt, self.plane);
+                        arc_from_endpoints_angle(
+                            s,
+                            e,
+                            if self.cw { -included } else { included },
+                            self.plane,
+                        )
+                    },
+                    line_wire(s, pt),
                 )
                 .into_iter()
                 .collect(),
@@ -2230,7 +2288,7 @@ impl CadCommand for ArcCommand {
             ArcStep::RadiusSE { s, e } => self
                 .preview(
                     arc_from_se_radius(s, e, pt, self.cw, self.plane),
-                    line_wire(s, e),
+                    line_wire(e, pt),
                 )
                 .into_iter()
                 .collect(),
