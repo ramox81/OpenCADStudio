@@ -105,6 +105,9 @@ pub(super) struct State {
     pending: Option<Operation>,
     completed: VecDeque<(String, Value, Value)>,
     owner: Option<(u64, String)>,
+    /// `attribute_form on`: a script's placements raise the ATTDIA attribute
+    /// form, as the user's do, instead of answering on the command line.
+    pub(super) attribute_form: bool,
     pub enabled: bool,
     /// Set by the first control request of the session (or by a web host's
     /// boot-time opt-in): while control is enabled, startup prompts that
@@ -1771,6 +1774,11 @@ impl OpenCADStudio {
             p.pending = p.pending.saturating_sub(1);
         }
         self.control_settle();
+    }
+    /// Whether a control client drives the command running in tab `i` and
+    /// answers its attribute values on the command line.
+    pub(in crate::app) fn control_answers_attributes(&self, i: usize) -> bool {
+        !self.control.attribute_form && self.control_owns_command(i)
     }
     /// Whether a control client drives the command running in tab `i`.
     pub(in crate::app) fn control_owns_command(&self, i: usize) -> bool {

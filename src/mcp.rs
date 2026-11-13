@@ -41,6 +41,8 @@ const MODERN_PROTOCOL_VERSION: &str = "2026-07-28";
 /// `dialog_discard` and `dialog_cancel`.
 /// The attribute form an attributed insertion raises is answerable from a
 /// script, so the action list gained `dialog_answer`.
+/// `attribute_form` lets a script's placements raise that form instead of
+/// answering the attribute values on the command line.
 /// Table cells are driven from a script: `table_cell_dialog`,
 /// `table_cell_warning`, `table_cell_tab` and `command_submit`.
 /// `set_properties` lists its `name` selector and takes a colour as a

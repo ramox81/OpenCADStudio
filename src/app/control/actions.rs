@@ -193,6 +193,10 @@ pub(super) const NAMES: &[&str] = &[
     "keytips",
     "dialog_ok",
     "dialog_answer",
+    // `attribute_form=on|off`: placements started by a script raise the
+    // ATTDIA attribute form (answered with dialog_answer / dialog_ok /
+    // dialog_cancel) instead of command-line prompts.
+    "attribute_form",
     "dialog_discard",
     "dialog_cancel",
     "block_def_dialog",
@@ -3403,6 +3407,14 @@ impl OpenCADStudio {
             }
             // Ribbon key tips: `show`, `alt` (a lone Alt), `type:<codes>`, `enter`,
             // `esc` or `hide`. Read them back with the `keytips` read operation.
+            "attribute_form" => {
+                self.control.attribute_form = match string(req, "value")? {
+                    "on" => true,
+                    "off" => false,
+                    _ => return Err(failure("invalid_value", "Use on or off")),
+                };
+                return Ok(Task::none());
+            }
             "keytips" => {
                 use crate::ui::ribbon::KeyTipInput as K;
                 let value = string(req, "value")?;

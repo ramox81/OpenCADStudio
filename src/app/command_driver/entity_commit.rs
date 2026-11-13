@@ -1399,7 +1399,7 @@ impl OpenCADStudio {
             // A control client answers the attribute prompts itself; a form
             // would sit over the command it feeds.
             let asks = self.tabs[i].scene.document.header.attribute_dialog
-                && !self.control_owns_command(i)
+                && !self.control_answers_attributes(i)
                 && attdefs
                     .iter()
                     .any(|ad| !ad.flags.constant && !ad.flags.preset);
