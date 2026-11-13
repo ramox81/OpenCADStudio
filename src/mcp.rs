@@ -57,7 +57,7 @@ const MODERN_PROTOCOL_VERSION: &str = "2026-07-28";
 /// Native dock panels are driven through `panel_input` and `panel_button`:
 /// form-only input, then the declared synchronous document-bound command.
 #[cfg(test)]
-const TOOL_SCHEMA_DIGEST: &str = "99bc4906b90c5076dcf1dd42fb2dd8e461e2c09a8a06295359d1b2b358908d88";
+const TOOL_SCHEMA_DIGEST: &str = "7e1aacbcde58c39518bbd53bf845e839005d37e4b514c545bb5943576d4e5c15";
 const MAX_REQUEST: usize = 1_048_576;
 const MAX_RESPONSE: u64 = 16 * 1024 * 1024;
 const CACHE_TTL_MS: u64 = 3_600_000;
