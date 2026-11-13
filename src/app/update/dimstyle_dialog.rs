@@ -818,16 +818,14 @@ impl OpenCADStudio {
                             self.dsd.rename = None;
                         } else if let Some(notice) = self.ds_name_notice(&new) {
                             self.dsd.notice = Some(notice);
-                        } else if let (Some(mut style), Some(extras)) =
-                            (self.ds_overridden(), self.ds_overridden_extras())
-                        {
+                        } else if let Some(mut style) = self.ds_overridden() {
                             let doc = &mut self.tabs[i].scene.document;
                             style.name = new.clone();
                             style.handle = doc.allocate_handle();
                             style.xref_dependent = false;
-                            let handle = style.handle;
+                            // The overrides carry no jog, break size or
+                            // DIMTALN record, so the new style has none.
                             let _ = doc.dim_styles.add(style);
-                            store_changed_extras(doc, handle, extras);
                             self.tabs[i].scene.dim_overrides = None;
                             self.dimstyle_selected = new;
                             self.dsd.overrides_selected = false;
@@ -884,11 +882,12 @@ impl OpenCADStudio {
             }
             DsMsg::SaveOverrides => {
                 self.dsd.context = None;
-                if let (Some(style), Some(extras)) = (self.ds_overridden(), self.ds_overridden_extras()) {
+                if let Some(style) = self.ds_overridden() {
                     let doc = &mut self.tabs[i].scene.document;
-                    let (handle, name) = (style.handle, style.name.clone());
+                    let name = style.name.clone();
+                    // The style's jog, break size and DIMTALN records stay as
+                    // they are: the overrides never carry them.
                     doc.dim_styles.add_or_replace(style);
-                    store_changed_extras(doc, handle, extras);
                     self.tabs[i].scene.dim_overrides = None;
                     self.ds_refresh_dimensions(&name);
                     self.dimstyle_selected = name;
@@ -1471,14 +1470,9 @@ impl OpenCADStudio {
             Mode::Override => {
                 let current = self.ds_current();
                 if let Some(base) = self.ds_style(&current).cloned() {
-                    let mut pairs = crate::entities::dim_override::diff_pairs(&base, &style);
-                    let base_extras = dim_style_extras(&self.tabs[i].scene.document, base.handle);
-                    if extras.dimtaln != base_extras.dimtaln {
-                        pairs.push((
-                            crate::entities::dim_override::DIMTALN,
-                            document::xdata::XDataValue::Integer16(extras.dimtaln),
-                        ));
-                    }
+                    // The jog height, break size and DIMTALN of Override…
+                    // are style records, not overrides: they are dropped.
+                    let pairs = crate::entities::dim_override::diff_pairs(&base, &style);
                     self.tabs[i].scene.dim_overrides =
                         (!pairs.is_empty()).then_some((current.clone(), pairs));
                     self.dimstyle_selected = current;
@@ -1859,15 +1853,4 @@ fn ds_commit_draft(e: &Edit) -> (DimStyle, DimStyleExtras) {
         dimtaln: e.dimtaln,
     };
     (d, extras)
-}
-
-/// Turning the overrides into a style (Rename, Save to current style)
-/// leaves the style's jog, break size and DIMTALN records as they are
-/// unless their values change.
-// ponytail: the changed case follows Modify's rule; only the unchanged
-// case was measured.
-fn store_changed_extras(doc: &mut Document, handle: Handle, extras: DimStyleExtras) {
-    if extras != dim_style_extras(doc, handle) {
-        update_dim_style_extras(doc, handle, extras);
-    }
 }
