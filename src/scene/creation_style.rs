@@ -143,13 +143,32 @@ pub fn dim_style_extras(doc: &Document, handle: Handle) -> DimStyleExtras {
 }
 
 /// Store `extras` on the style `handle`, registering their applications.
+/// A style made in the style dialog keeps all three records.
 pub fn set_dim_style_extras(doc: &mut Document, handle: Handle, extras: DimStyleExtras) {
+    write_dim_style_extras(doc, handle, extras, true);
+}
+
+/// Store `extras` on an existing style the way a modification does: the
+/// jog height and DIMTALN records always, the break size record only when
+/// the style already has one or its size changes.
+pub fn update_dim_style_extras(doc: &mut Document, handle: Handle, extras: DimStyleExtras) {
+    let with_break = doc
+        .object_xdata(handle)
+        .is_some_and(|data| data.get_record(DIMBREAK_APP).is_some())
+        || extras.break_size != dim_style_extras(doc, handle).break_size;
+    write_dim_style_extras(doc, handle, extras, with_break);
+}
+
+fn write_dim_style_extras(doc: &mut Document, handle: Handle, extras: DimStyleExtras, with_break: bool) {
     use document::xdata::{ExtendedDataRecord, XDataValue};
     for (app, code, value) in [
         (DIMJAG_APP, 388, XDataValue::Real(extras.jog_height)),
         (DIMBREAK_APP, 391, XDataValue::Real(extras.break_size)),
         (DIMTALN_APP, 392, XDataValue::Integer16(extras.dimtaln)),
     ] {
+        if app == DIMBREAK_APP && !with_break {
+            continue;
+        }
         if !doc.app_ids.contains(app) {
             let mut entry = document::tables::AppId::new(app);
             entry.handle = doc.allocate_handle();

@@ -6,7 +6,9 @@
 //! edit a draft that only OK writes back.
 
 use crate::app::{Message, ModalKind, OpenCADStudio, StyleKind};
-use crate::scene::creation_style::{dim_style_extras, set_dim_style_extras, DimStyleExtras};
+use crate::scene::creation_style::{
+    dim_style_extras, set_dim_style_extras, update_dim_style_extras, DimStyleExtras,
+};
 use crate::entities::dim_override;
 use crate::tr;
 use crate::ui::style::dimstyle::{
@@ -886,7 +888,7 @@ impl OpenCADStudio {
                     let doc = &mut self.tabs[i].scene.document;
                     let (handle, name) = (style.handle, style.name.clone());
                     doc.dim_styles.add_or_replace(style);
-                    set_dim_style_extras(doc, handle, extras);
+                    update_dim_style_extras(doc, handle, extras);
                     self.tabs[i].scene.dim_overrides = None;
                     self.ds_refresh_dimensions(&name);
                     self.dimstyle_selected = name;
@@ -1445,11 +1447,11 @@ impl OpenCADStudio {
                         family.push(member.name.clone());
                         let member_handle = member.handle;
                         doc.dim_styles.add_or_replace(member);
-                        set_dim_style_extras(doc, member_handle, member_extras);
+                        update_dim_style_extras(doc, member_handle, member_extras);
                     }
                 }
                 doc.dim_styles.add_or_replace(style);
-                set_dim_style_extras(doc, handle, extras);
+                update_dim_style_extras(doc, handle, extras);
                 self.ds_refresh_dimensions(&name);
                 for member in family {
                     self.ds_refresh_dimensions(&member);
