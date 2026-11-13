@@ -88,16 +88,8 @@ pub fn ensure_iso_dim_style(doc: &mut Document) -> Handle {
     style.dimmzf = 100.0;
     style.dimaltmzf = 100.0;
     let handle = style.handle;
+    // The template's ISO-25 carries no jog, break or DIMTALN records.
     let _ = doc.dim_styles.add(style);
-    set_dim_style_extras(
-        doc,
-        handle,
-        DimStyleExtras {
-            jog_height: 1.5,
-            break_size: 3.75,
-            dimtaln: 0,
-        },
-    );
     handle
 }
 
@@ -122,7 +114,9 @@ pub fn ensure_annotative_dim_style(doc: &mut Document) -> Handle {
     style.dimscale = 0.0;
     let handle = style.handle;
     let _ = doc.dim_styles.add(style);
-    set_dim_style_extras(
+    // The template's Annotative style has the jog and DIMTALN records
+    // but no break size record.
+    update_dim_style_extras(
         doc,
         handle,
         DimStyleExtras {
@@ -176,13 +170,32 @@ pub fn dim_style_extras(doc: &Document, handle: Handle) -> DimStyleExtras {
 }
 
 /// Store `extras` on the style `handle`, registering their applications.
+/// A style made in the style dialog keeps all three records.
 pub fn set_dim_style_extras(doc: &mut Document, handle: Handle, extras: DimStyleExtras) {
+    write_dim_style_extras(doc, handle, extras, true);
+}
+
+/// Store `extras` on an existing style the way a modification does: the
+/// jog height and DIMTALN records always, the break size record only when
+/// the style already has one or its size changes.
+pub fn update_dim_style_extras(doc: &mut Document, handle: Handle, extras: DimStyleExtras) {
+    let with_break = doc
+        .object_xdata(handle)
+        .is_some_and(|data| data.get_record(DIMBREAK_APP).is_some())
+        || extras.break_size != dim_style_extras(doc, handle).break_size;
+    write_dim_style_extras(doc, handle, extras, with_break);
+}
+
+fn write_dim_style_extras(doc: &mut Document, handle: Handle, extras: DimStyleExtras, with_break: bool) {
     use document::xdata::{ExtendedDataRecord, XDataValue};
     for (app, code, value) in [
         (DIMJAG_APP, 388, XDataValue::Real(extras.jog_height)),
         (DIMBREAK_APP, 391, XDataValue::Real(extras.break_size)),
         (DIMTALN_APP, 392, XDataValue::Integer16(extras.dimtaln)),
     ] {
+        if app == DIMBREAK_APP && !with_break {
+            continue;
+        }
         if !doc.app_ids.contains(app) {
             let mut entry = document::tables::AppId::new(app);
             entry.handle = doc.allocate_handle();
