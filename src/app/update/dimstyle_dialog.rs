@@ -827,7 +827,7 @@ impl OpenCADStudio {
                             style.xref_dependent = false;
                             let handle = style.handle;
                             let _ = doc.dim_styles.add(style);
-                            set_dim_style_extras(doc, handle, extras);
+                            store_changed_extras(doc, handle, extras);
                             self.tabs[i].scene.dim_overrides = None;
                             self.dimstyle_selected = new;
                             self.dsd.overrides_selected = false;
@@ -888,7 +888,7 @@ impl OpenCADStudio {
                     let doc = &mut self.tabs[i].scene.document;
                     let (handle, name) = (style.handle, style.name.clone());
                     doc.dim_styles.add_or_replace(style);
-                    update_dim_style_extras(doc, handle, extras);
+                    store_changed_extras(doc, handle, extras);
                     self.tabs[i].scene.dim_overrides = None;
                     self.ds_refresh_dimensions(&name);
                     self.dimstyle_selected = name;
@@ -1859,4 +1859,15 @@ fn ds_commit_draft(e: &Edit) -> (DimStyle, DimStyleExtras) {
         dimtaln: e.dimtaln,
     };
     (d, extras)
+}
+
+/// Turning the overrides into a style (Rename, Save to current style)
+/// leaves the style's jog, break size and DIMTALN records as they are
+/// unless their values change.
+// ponytail: the changed case follows Modify's rule; only the unchanged
+// case was measured.
+fn store_changed_extras(doc: &mut Document, handle: Handle, extras: DimStyleExtras) {
+    if extras != dim_style_extras(doc, handle) {
+        update_dim_style_extras(doc, handle, extras);
+    }
 }
