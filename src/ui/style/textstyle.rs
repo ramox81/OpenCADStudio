@@ -32,6 +32,8 @@ pub struct TextStyleView<'a> {
     pub read_only: bool,
     /// The texts that use the selected style, by kind.
     pub usage: Usage,
+    /// The list of the texts using the style is open.
+    pub usage_open: bool,
     pub font_buf: &'a str,
     pub width_buf: &'a str,
     pub oblique_buf: &'a str,
@@ -422,8 +424,11 @@ fn toggle_chip<'a>(
 }
 
 /// A titled card of rows.
-fn group<'a>(title: Cow<'static, str>, rows: Vec<Element<'a, Message>>) -> Element<'a, Message> {
-    crate::ui::window::pdf_dialogs::card(title.into_owned(), column(rows).spacing(8))
+fn group<'a>(
+    title: Cow<'static, str>,
+    rows: Vec<Element<'a, Message>>,
+) -> (Option<String>, Element<'a, Message>) {
+    (Some(title.into_owned()), column(rows).spacing(8).into())
 }
 
 /// A fixed badge: what differs, how many texts use the style.
@@ -443,7 +448,7 @@ fn info_chip<'a>(label: String) -> Element<'a, Message> {
 }
 
 /// The setting cards: font, size and effects.
-fn properties<'a>(v: &TextStyleView<'a>) -> Vec<Element<'a, Message>> {
+fn properties<'a>(v: &TextStyleView<'a>) -> Vec<(Option<String>, Element<'a, Message>)> {
     let ttf = !v.ttf_buf.trim().is_empty();
     let face = FaceStyle::of(v.bold, v.italic);
     let face_style: Element<'a, Message> = if ttf && !v.read_only {
@@ -467,8 +472,10 @@ fn properties<'a>(v: &TextStyleView<'a>) -> Vec<Element<'a, Message>> {
         .spacing(3)
         .into()
     };
-    let mut font_rows = vec![labelled_row(
-        t!("Name"),
+    // The name over its own full-width row: the picker shows the font
+    // file beside the name.
+    let mut font_rows = vec![column![
+        text(t!("Name")).size(11),
         crate::ui::font_picker::view(crate::ui::font_picker::FontPicker {
             state: v.font_picker,
             selected: if ttf {
@@ -481,7 +488,9 @@ fn properties<'a>(v: &TextStyleView<'a>) -> Vec<Element<'a, Message>> {
             read_only: v.read_only,
             on_event: Message::TextStyleFont,
         }),
-    )];
+    ]
+    .spacing(4)
+    .into()];
     if let Some(turned_off) = &v.turned_off {
         font_rows.push(
             container(text(turned_off.clone()).size(11))
@@ -574,6 +583,9 @@ fn properties<'a>(v: &TextStyleView<'a>) -> Vec<Element<'a, Message>> {
             .wrap()
             .vertical_spacing(6)
             .into(),
+            hint(t!(
+                "Backward and Upside down affect single-line text and attributes, not MTEXT."
+            )),
         ],
     );
     vec![font, size, effects]
@@ -683,13 +695,18 @@ fn preview_card<'a>(v: &TextStyleView<'a>) -> Element<'a, Message> {
             .width(150),
         );
     }
-    let preview = container(
+    // The font under the drawing; a long name wraps inside.
+    let preview = container(column![
         canvas(PreviewCanvas {
             outline: outline(&v.preview),
         })
         .width(Length::Fill)
         .height(110),
-    )
+        text(v.preview.caption.clone())
+            .size(10)
+            .style(muted_style)
+            .width(Length::Fill),
+    ])
     .padding([5, 10])
     .width(Length::Fill)
     .style(well_style);
@@ -713,11 +730,65 @@ fn preview_card<'a>(v: &TextStyleView<'a>) -> Element<'a, Message> {
     if let Some(difference) = difference {
         line = line.push(info_chip(difference));
     }
-    let line = line.push(info_chip(crate::tr!("text-style", "used-count", count = count)));
-    container(column![head, preview, line].spacing(8))
+    // The count opens the list of the texts using the style.
+    let used = mouse_area(info_chip(format!(
+        "{} {}",
+        crate::tr!("text-style", "used-count", count = count),
+        if v.usage_open { "▴" } else { "▾" }
+    )))
+    .on_press(Message::TextStyleToggle("usage_open"))
+    .interaction(mouse::Interaction::Pointer);
+    let line = line.push(used);
+    let mut body = column![head, preview, line].spacing(8);
+    if v.usage_open {
+        body = body.push(usage_list(v));
+    }
+    container(body)
         .padding([12, 14])
         .width(Length::Fill)
         .style(crate::ui::window::pdf_dialogs::card_style)
+        .into()
+}
+
+/// The texts that use the style, by kind, and how many of them are inside
+/// block definitions.
+fn usage_list<'a>(v: &TextStyleView<'a>) -> Element<'a, Message> {
+    use crate::app::text_style_users::TextKind;
+    let kind_label = |kind: TextKind| match kind {
+        TextKind::Text => t!("Single-line text"),
+        TextKind::MText => t!("MTEXT"),
+        TextKind::AttributeDefinition => t!("Attribute definitions"),
+        TextKind::Attribute => t!("Attributes"),
+    };
+    let mut list = column![text(t!("Texts using this style").to_uppercase())
+        .size(10)
+        .style(crate::ui::window::pdf_dialogs::accent_text)]
+    .spacing(4);
+    for (kind, count) in &v.usage.kinds {
+        list = list.push(row![
+            text(kind_label(*kind)).size(11).width(Length::Fill),
+            text(count.to_string()).size(11),
+        ]);
+    }
+    if v.usage.kinds.is_empty() {
+        list = list.push(text(t!("No texts use this style.")).size(11).style(muted_style));
+    } else if v.usage.in_blocks > 0 {
+        let count = v.usage.in_blocks;
+        let blocks = v.usage.blocks;
+        list = list.push(
+            text(if blocks == 1 {
+                crate::tf!("{count} of them inside 1 block definition.")
+            } else {
+                crate::tf!("{count} of them inside {blocks} block definitions.")
+            })
+            .size(10)
+            .style(muted_style),
+        );
+    }
+    container(list)
+        .padding([8, 10])
+        .width(Length::Fill)
+        .style(crate::ui::window::pdf_dialogs::well_style)
         .into()
 }
 
@@ -945,13 +1016,13 @@ fn layout<'a>(
     if let Some(summary) = apply_summary(v, summary_height) {
         stack = stack.push(summary);
     }
+    // Side by side the cards are as tall as the tallest.
     let stack = if narrow {
-        cards.into_iter().fold(stack, |stack, card| stack.push(card))
+        cards.into_iter().fold(stack, |stack, card| {
+            stack.push(crate::ui::window::pdf_dialogs::card_row(vec![card], 12.0))
+        })
     } else {
-        stack.push(
-            row(cards.into_iter().map(|card| container(card).width(Length::Fill).into()))
-                .spacing(12),
-        )
+        stack.push(crate::ui::window::pdf_dialogs::card_row(cards, 12.0))
     };
     let editor: Element<'a, Message> = scrollable(
         container(stack).padding(iced::Padding::ZERO.right(12)),
@@ -1016,6 +1087,7 @@ fn layout<'a>(
         list: None,
         extra_actions: Vec::new(),
         list_title: Some(Cow::Owned(crate::tr!("text-style", "styles-title"))),
+        count_label: Some(|count| count.to_string()),
         editor,
     })
 }

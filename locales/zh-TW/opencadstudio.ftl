@@ -7071,7 +7071,8 @@ dimstyle =
     .surveyors-units = 測量單位
 
 style-manager =
-    .only-used = Only styles in use
+    .current-badge = 目前
+    .only-used = 僅使用中的型式
     .use-big-font = 使用大字型
     .number-field-range = 請使用數字和小數點。請輸入介於 __ocs_fmt_0__ 至 __ocs_fmt_1__ 之間的值。
     .number-field-non-negative = 請輸入 0 或正數。
@@ -8872,21 +8873,23 @@ block-value-set =
     .y-distance = Y 距離
 
 table-style-cells =
-    .table-styles = Table styles
-    .cell-style-of = cell style
-    .change = Change…
-    .fill-alignment = Fill and alignment
-    .line-card = Line
-    .apply-edges = Edges to apply
-    .edges-hint = Click an edge set to give it the line on the left.
-    .table-card = Table
-    .preview-short = Preview
-    .used-none = No cells use this style
-    .used-some = Used by tables of this style
-    .new-cell-style = New cell style
-    .selected-style = Selected style
-    .usage = Usage
-    .manage-help = Pick a cell style: rename it in place, delete it or add a new one. OK keeps the changes, Cancel restores them.
+    .rows = 列
+    .table-count = { $count } 個表格
+    .table-styles = 表格型式
+    .cell-style-of = 儲存格型式
+    .change = 變更…
+    .fill-alignment = 填滿與對齊
+    .line-card = 線條
+    .apply-edges = 要套用的邊
+    .edges-hint = 按一下一組邊，將左側的線條套用到這些邊。
+    .table-card = 表格
+    .preview-short = 預覽
+    .used-none = 沒有儲存格使用此型式
+    .used-some = 此型式的表格正在使用
+    .new-cell-style = 新增儲存格型式
+    .selected-style = 選取的型式
+    .usage = 使用情況
+    .manage-help = 選擇一個儲存格型式：就地更名、刪除或新增。「確定」保留變更，「取消」還原。
     .create-entry = Create new cell style…
     .manage-entry = Manage cell styles…
     .new-button = New…
@@ -8953,7 +8956,6 @@ table-style-cells =
     .table-direction = 表格方向
 
 table-cells =
-    .use-current = Use current units and precision
     .borders-title = 儲存格邊框
     .contents-title = 儲存格內容
     .line = 線
@@ -9863,8 +9865,8 @@ doc-tabs =
     .above-palettes = 索引標籤位於選項板上方
 
 text-style =
-    .styles-title = Text styles
-    .used-count = Used: { $count }
+    .styles-title = 文字型式
+    .used-count = 已使用：{ $count }
     .invalid-width =
         寬度係數無效，請輸入新數值。
 

@@ -7083,7 +7083,8 @@ dimstyle =
     .surveyors-units = Các đơn vị khảo sát
 
 style-manager =
-    .only-used = Only styles in use
+    .current-badge = hiện hành
+    .only-used = Chỉ các kiểu đang dùng
     .use-big-font = Use Big Font
     .number-field-range = Use digits and a decimal point. Enter a value from __ocs_fmt_0__ to __ocs_fmt_1__.
     .number-field-non-negative = Enter 0 or a positive number.
@@ -8882,21 +8883,23 @@ block-value-set =
     .y-distance = Khoảng cách Y
 
 table-style-cells =
-    .table-styles = Table styles
-    .cell-style-of = cell style
-    .change = Change…
-    .fill-alignment = Fill and alignment
-    .line-card = Line
-    .apply-edges = Edges to apply
-    .edges-hint = Click an edge set to give it the line on the left.
-    .table-card = Table
-    .preview-short = Preview
-    .used-none = No cells use this style
-    .used-some = Used by tables of this style
-    .new-cell-style = New cell style
-    .selected-style = Selected style
-    .usage = Usage
-    .manage-help = Pick a cell style: rename it in place, delete it or add a new one. OK keeps the changes, Cancel restores them.
+    .rows = Hàng
+    .table-count = { $count } bảng
+    .table-styles = Kiểu bảng
+    .cell-style-of = kiểu ô
+    .change = Thay đổi…
+    .fill-alignment = Tô nền và căn chỉnh
+    .line-card = Đường
+    .apply-edges = Cạnh cần áp dụng
+    .edges-hint = Bấm vào một nhóm cạnh để áp dụng đường ở bên trái cho nhóm đó.
+    .table-card = Bảng
+    .preview-short = Xem trước
+    .used-none = Không ô nào dùng kiểu này
+    .used-some = Được dùng bởi các bảng của kiểu này
+    .new-cell-style = Kiểu ô mới
+    .selected-style = Kiểu đã chọn
+    .usage = Sử dụng
+    .manage-help = Chọn một kiểu ô: đổi tên tại chỗ, xóa hoặc thêm kiểu mới. OK giữ thay đổi, Hủy khôi phục chúng.
     .create-entry = Create new cell style…
     .manage-entry = Manage cell styles…
     .new-button = New…
@@ -8963,7 +8966,6 @@ table-style-cells =
     .table-direction = Hướng bảng
 
 table-cells =
-    .use-current = Use current units and precision
     .borders-title = Viền ô
     .contents-title = Nội dung ô
     .line = Đường
@@ -9873,8 +9875,8 @@ doc-tabs =
     .above-palettes = Thẻ phía trên bảng
 
 text-style =
-    .styles-title = Text styles
-    .used-count = Used: { $count }
+    .styles-title = Kiểu văn bản
+    .used-count = Đang dùng: { $count }
     .invalid-width =
         Invalid Width Factor, please enter a new value.
 

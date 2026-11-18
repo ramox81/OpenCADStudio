@@ -7064,7 +7064,8 @@ dimstyle =
     .surveyors-units = सर्वेक्षण इकाइयाँ
 
 style-manager =
-    .only-used = Only styles in use
+    .current-badge = वर्तमान
+    .only-used = केवल उपयोग में शैलियाँ
     .use-big-font = Use Big Font
     .number-field-range = Use digits and a decimal point. Enter a value from __ocs_fmt_0__ to __ocs_fmt_1__.
     .number-field-non-negative = Enter 0 or a positive number.
@@ -8873,21 +8874,23 @@ block-value-set =
     .y-distance = Y दूरी
 
 table-style-cells =
-    .table-styles = Table styles
-    .cell-style-of = cell style
-    .change = Change…
-    .fill-alignment = Fill and alignment
-    .line-card = Line
-    .apply-edges = Edges to apply
-    .edges-hint = Click an edge set to give it the line on the left.
-    .table-card = Table
-    .preview-short = Preview
-    .used-none = No cells use this style
-    .used-some = Used by tables of this style
-    .new-cell-style = New cell style
-    .selected-style = Selected style
-    .usage = Usage
-    .manage-help = Pick a cell style: rename it in place, delete it or add a new one. OK keeps the changes, Cancel restores them.
+    .rows = पंक्तियाँ
+    .table-count = { $count } तालिका
+    .table-styles = तालिका शैलियाँ
+    .cell-style-of = सेल शैली
+    .change = बदलें…
+    .fill-alignment = भराव और संरेखण
+    .line-card = रेखा
+    .apply-edges = लागू करने हेतु किनारे
+    .edges-hint = किनारों के किसी समूह पर क्लिक करें ताकि उसे बाईं ओर की रेखा मिले।
+    .table-card = तालिका
+    .preview-short = पूर्वावलोकन
+    .used-none = कोई सेल इस शैली का उपयोग नहीं करता
+    .used-some = इस शैली की तालिकाएँ इसका उपयोग करती हैं
+    .new-cell-style = नई सेल शैली
+    .selected-style = चयनित शैली
+    .usage = उपयोग
+    .manage-help = एक सेल शैली चुनें: उसका नाम वहीं बदलें, उसे हटाएँ या नई जोड़ें। ठीक बदलाव रखता है, रद्द करें उन्हें लौटा देता है।
     .create-entry = Create new cell style…
     .manage-entry = Manage cell styles…
     .new-button = New…
@@ -8954,7 +8957,6 @@ table-style-cells =
     .table-direction = तालिका दिशा
 
 table-cells =
-    .use-current = Use current units and precision
     .borders-title = सेल सीमाएँ
     .contents-title = सेल सामग्री
     .line = रेखा
@@ -9864,8 +9866,8 @@ doc-tabs =
     .above-palettes = पैलेट के ऊपर टैब
 
 text-style =
-    .styles-title = Text styles
-    .used-count = Used: { $count }
+    .styles-title = टेक्स्ट शैलियाँ
+    .used-count = उपयोग में: { $count }
     .invalid-width =
         Invalid Width Factor, please enter a new value.
 

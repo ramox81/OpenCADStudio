@@ -7077,7 +7077,8 @@ dimstyle =
     .surveyors-units = Геодезические единицы
 
 style-manager =
-    .only-used = Only styles in use
+    .current-badge = текущий
+    .only-used = Только используемые стили
     .use-big-font = Use Big Font
     .number-field-range = Use digits and a decimal point. Enter a value from __ocs_fmt_0__ to __ocs_fmt_1__.
     .number-field-non-negative = Enter 0 or a positive number.
@@ -8889,21 +8890,27 @@ block-value-set =
     .y-distance = Расстояние Y
 
 table-style-cells =
-    .table-styles = Table styles
-    .cell-style-of = cell style
-    .change = Change…
-    .fill-alignment = Fill and alignment
-    .line-card = Line
-    .apply-edges = Edges to apply
-    .edges-hint = Click an edge set to give it the line on the left.
-    .table-card = Table
-    .preview-short = Preview
-    .used-none = No cells use this style
-    .used-some = Used by tables of this style
-    .new-cell-style = New cell style
-    .selected-style = Selected style
-    .usage = Usage
-    .manage-help = Pick a cell style: rename it in place, delete it or add a new one. OK keeps the changes, Cancel restores them.
+    .rows = Строки
+    .table-count = { $count ->
+        [one] { $count } таблица
+        [few] { $count } таблицы
+       *[other] { $count } таблиц
+    }
+    .table-styles = Стили таблиц
+    .cell-style-of = стиль ячеек
+    .change = Изменить…
+    .fill-alignment = Заливка и выравнивание
+    .line-card = Линия
+    .apply-edges = Применяемые кромки
+    .edges-hint = Щёлкните набор кромок, чтобы применить к нему линию слева.
+    .table-card = Таблица
+    .preview-short = Просмотр
+    .used-none = Ни одна ячейка не использует этот стиль
+    .used-some = Используется таблицами этого стиля
+    .new-cell-style = Новый стиль ячеек
+    .selected-style = Выбранный стиль
+    .usage = Использование
+    .manage-help = Выберите стиль ячеек: переименуйте его на месте, удалите или добавьте новый. «ОК» сохраняет изменения, «Отмена» возвращает их.
     .create-entry = Create new cell style…
     .manage-entry = Manage cell styles…
     .new-button = New…
@@ -8970,7 +8977,6 @@ table-style-cells =
     .table-direction = Направление таблицы
 
 table-cells =
-    .use-current = Use current units and precision
     .borders-title = Границы ячейки
     .contents-title = Содержимое ячейки
     .line = Линия
@@ -9880,8 +9886,8 @@ doc-tabs =
     .above-palettes = Вкладки над палитрами
 
 text-style =
-    .styles-title = Text styles
-    .used-count = Used: { $count }
+    .styles-title = Текстовые стили
+    .used-count = Используется: { $count }
     .invalid-width =
         Invalid Width Factor, please enter a new value.
 

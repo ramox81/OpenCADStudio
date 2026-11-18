@@ -3198,7 +3198,7 @@ impl OpenCADStudio {
             // "down", "delete", "layout=1|2|4", "content_spacing=<n>"; the
             // Cell Block window: "block=<name>", "align=1..9",
             // "scale=<n>", "autofit=0|1", "rotation=<deg>"; the Cell Data
-            // Format window: "kind=0..8", "unit=<n>", "precision=<text>", "use_current=0|1",
+            // Format window: "kind=0..8", "unit=<n>", "precision=<text>",
             // "symbol=<s>", "append=0|1", "negative=0|1", "separator=0..2",
             // "axis=0..2", "date=<picture>", "conversion=<n>", "prefix=<s>",
             // "suffix=<s>", "decimal=0..2", "thousands=0..3",
@@ -3255,7 +3255,6 @@ impl OpenCADStudio {
                         "kind" => T::FormatKind(value.parse().map_err(|_| bad())?),
                         "unit" => T::FormatUnit(value.parse().map_err(|_| bad())?),
                         "precision" => T::Precision(value.to_string()),
-                        "use_current" => T::UseCurrent(value == "1"),
                         "symbol" => T::Symbol(value.to_string()),
                         "append" => T::Append(value == "1"),
                         "negative" => T::Negative(value == "1"),
@@ -3768,7 +3767,7 @@ impl OpenCADStudio {
             // "delete_no", "modified_yes", "modified_no", "rename=<old>:<new>",
             // "font=<SHX file or TrueType family>", "big_font=<SHX file>",
             // "toggle=backward|upside_down|vertical|annotative|orientation|
-            // use_big_font", "height|width|oblique=<text>", "apply" or
+            // use_big_font|usage_open", "height|width|oblique=<text>", "apply" or
             // "close".
             "text_style_dialog" => {
                 use crate::ui::font_picker::{FontChoice, FontPickerEvent as F};
@@ -3785,6 +3784,7 @@ impl OpenCADStudio {
                     "annotative",
                     "orientation",
                     "use_big_font",
+                    "usage_open",
                 ];
                 match key {
                     "select" => Message::TextStyleDialogSelect(value.to_string()),

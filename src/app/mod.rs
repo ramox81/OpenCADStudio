@@ -2249,6 +2249,8 @@ pub(super) struct OpenCADStudio {
     textstyle_counts: rustc_hash::FxHashMap<String, usize>,
     /// The list shows only the styles in use.
     textstyle_in_use_only: bool,
+    /// The text style manager's list of the texts using the style is open.
+    textstyle_usage_open: bool,
     /// The preview's sample text; empty shows the default.
     textstyle_sample: String,
     textstyle_compare: String,
@@ -7038,6 +7040,7 @@ impl OpenCADStudio {
             textstyle_selected: "Standard".to_string(),
             textstyle_counts: Default::default(),
             textstyle_in_use_only: false,
+            textstyle_usage_open: false,
             textstyle_sample: String::new(),
             textstyle_compare: String::new(),
             textstyle_draft: Default::default(),

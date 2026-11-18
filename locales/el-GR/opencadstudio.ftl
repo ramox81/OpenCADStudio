@@ -7076,7 +7076,8 @@ dimstyle =
     .surveyors-units = Τοπογραφικές μονάδες
 
 style-manager =
-    .only-used = Only styles in use
+    .current-badge = τρέχον
+    .only-used = Μόνο στυλ σε χρήση
     .use-big-font = Use Big Font
     .number-field-range = Use digits and a decimal point. Enter a value from __ocs_fmt_0__ to __ocs_fmt_1__.
     .number-field-non-negative = Enter 0 or a positive number.
@@ -8885,21 +8886,26 @@ block-value-set =
     .y-distance = Απόσταση Y
 
 table-style-cells =
-    .table-styles = Table styles
-    .cell-style-of = cell style
-    .change = Change…
-    .fill-alignment = Fill and alignment
-    .line-card = Line
-    .apply-edges = Edges to apply
-    .edges-hint = Click an edge set to give it the line on the left.
-    .table-card = Table
-    .preview-short = Preview
-    .used-none = No cells use this style
-    .used-some = Used by tables of this style
-    .new-cell-style = New cell style
-    .selected-style = Selected style
-    .usage = Usage
-    .manage-help = Pick a cell style: rename it in place, delete it or add a new one. OK keeps the changes, Cancel restores them.
+    .rows = Γραμμές
+    .table-count = { $count ->
+        [one] { $count } πίνακας
+       *[other] { $count } πίνακες
+    }
+    .table-styles = Στυλ πινάκων
+    .cell-style-of = στυλ κελιού
+    .change = Αλλαγή…
+    .fill-alignment = Γέμισμα και στοίχιση
+    .line-card = Γραμμή
+    .apply-edges = Ακμές για εφαρμογή
+    .edges-hint = Κάντε κλικ σε ένα σύνολο ακμών για να του δώσετε τη γραμμή στα αριστερά.
+    .table-card = Πίνακας
+    .preview-short = Προεπισκόπηση
+    .used-none = Κανένα κελί δεν χρησιμοποιεί αυτό το στυλ
+    .used-some = Χρησιμοποιείται από πίνακες αυτού του στυλ
+    .new-cell-style = Νέο στυλ κελιού
+    .selected-style = Επιλεγμένο στυλ
+    .usage = Χρήση
+    .manage-help = Επιλέξτε ένα στυλ κελιού: μετονομάστε το επί τόπου, διαγράψτε το ή προσθέστε νέο. Το OK κρατά τις αλλαγές, το Άκυρο τις επαναφέρει.
     .create-entry = Create new cell style…
     .manage-entry = Manage cell styles…
     .new-button = New…
@@ -8966,7 +8972,6 @@ table-style-cells =
     .table-direction = Κατεύθυνση πίνακα
 
 table-cells =
-    .use-current = Use current units and precision
     .borders-title = Περιγράμματα κελιού
     .contents-title = Περιεχόμενο κελιού
     .line = Γραμμή
@@ -9876,8 +9881,8 @@ doc-tabs =
     .above-palettes = Καρτέλες πάνω από τις παλέτες
 
 text-style =
-    .styles-title = Text styles
-    .used-count = Used: { $count }
+    .styles-title = Στυλ κειμένου
+    .used-count = Σε χρήση: { $count }
     .invalid-width =
         Invalid Width Factor, please enter a new value.
 

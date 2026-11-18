@@ -15468,6 +15468,10 @@ impl OpenCADStudio {
                 }
                 Task::none()
             }
+            Message::TextStyleToggle("usage_open") => {
+                self.textstyle_usage_open = !self.textstyle_usage_open;
+                Task::none()
+            }
             Message::TextStyleToggle(field) => {
                 if self.selected_textstyle_is_read_only() {
                     return Task::none();
@@ -15622,6 +15626,7 @@ impl OpenCADStudio {
 
             Message::TableStyleApply => {
                 self.stage_tablestyle_bufs();
+                self.ts_settle_grids();
                 self.style_stage_commit();
                 Task::none()
             }

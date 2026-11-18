@@ -7075,7 +7075,8 @@ dimstyle =
     .surveyors-units = 측량 단위
 
 style-manager =
-    .only-used = Only styles in use
+    .current-badge = 현재
+    .only-used = 사용 중인 스타일만
     .use-big-font = Use Big Font
     .number-field-range = Use digits and a decimal point. Enter a value from __ocs_fmt_0__ to __ocs_fmt_1__.
     .number-field-non-negative = Enter 0 or a positive number.
@@ -8874,21 +8875,23 @@ block-value-set =
     .y-distance = Y 거리
 
 table-style-cells =
-    .table-styles = Table styles
-    .cell-style-of = cell style
-    .change = Change…
-    .fill-alignment = Fill and alignment
-    .line-card = Line
-    .apply-edges = Edges to apply
-    .edges-hint = Click an edge set to give it the line on the left.
-    .table-card = Table
-    .preview-short = Preview
-    .used-none = No cells use this style
-    .used-some = Used by tables of this style
-    .new-cell-style = New cell style
-    .selected-style = Selected style
-    .usage = Usage
-    .manage-help = Pick a cell style: rename it in place, delete it or add a new one. OK keeps the changes, Cancel restores them.
+    .rows = 행
+    .table-count = 표 { $count }개
+    .table-styles = 표 스타일
+    .cell-style-of = 셀 스타일
+    .change = 변경…
+    .fill-alignment = 채우기 및 정렬
+    .line-card = 선
+    .apply-edges = 적용할 모서리
+    .edges-hint = 모서리 세트를 클릭하면 왼쪽의 선이 적용됩니다.
+    .table-card = 표
+    .preview-short = 미리보기
+    .used-none = 이 스타일을 사용하는 셀이 없습니다
+    .used-some = 이 스타일의 표에서 사용 중
+    .new-cell-style = 새 셀 스타일
+    .selected-style = 선택한 스타일
+    .usage = 사용
+    .manage-help = 셀 스타일을 선택하십시오: 그 자리에서 이름을 바꾸거나 삭제하거나 새로 추가합니다. 확인은 변경 내용을 유지하고 취소는 되돌립니다.
     .create-entry = Create new cell style…
     .manage-entry = Manage cell styles…
     .new-button = New…
@@ -8955,7 +8958,6 @@ table-style-cells =
     .table-direction = 테이블 방향
 
 table-cells =
-    .use-current = Use current units and precision
     .borders-title = 셀 테두리
     .contents-title = 셀 내용
     .line = 선
@@ -9865,8 +9867,8 @@ doc-tabs =
     .above-palettes = 팔레트 위에 탭
 
 text-style =
-    .styles-title = Text styles
-    .used-count = Used: { $count }
+    .styles-title = 문자 스타일
+    .used-count = 사용: { $count }
     .invalid-width =
         Invalid Width Factor, please enter a new value.
 

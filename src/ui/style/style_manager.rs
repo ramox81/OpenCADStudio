@@ -88,6 +88,9 @@ pub struct Scaffold<'a, 'b> {
     /// editor's own cards, the toolbar on a raised strip. `None` keeps the
     /// plain frame.
     pub list_title: Option<Cow<'static, str>>,
+    /// In the card layout, how a row's count reads ("3 tables"); the
+    /// current style reads "current" instead.
+    pub count_label: Option<fn(usize) -> String>,
     pub editor: Element<'a, Message>,
 }
 
@@ -220,6 +223,14 @@ pub fn view<'a, 'b>(s: Scaffold<'a, 'b>) -> Element<'a, Message> {
                 !(s.read_only && is_sel),
                 s.rows.and_then(|rows| rows.get(index).copied()),
                 s.on_context.map(|on_context| on_context(name.clone())),
+                s.count_label.filter(|_| card_mode).and_then(|count_label| {
+                    if is_current {
+                        Some(crate::tr!("style-manager", "current-badge"))
+                    } else {
+                        let count = s.rows?.get(index)?.count;
+                        Some(count_label(count))
+                    }
+                }),
             );
             match &s.context_menu {
                 Some((target, actions)) if *target == name.as_str() => {

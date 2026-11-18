@@ -7064,7 +7064,8 @@ dimstyle =
     .surveyors-units = 測量単位
 
 style-manager =
-    .only-used = Only styles in use
+    .current-badge = 現在
+    .only-used = 使用中のスタイルのみ
     .use-big-font = Use Big Font
     .number-field-range = Use digits and a decimal point. Enter a value from __ocs_fmt_0__ to __ocs_fmt_1__.
     .number-field-non-negative = Enter 0 or a positive number.
@@ -8863,21 +8864,23 @@ block-value-set =
     .y-distance = Y 距離
 
 table-style-cells =
-    .table-styles = Table styles
-    .cell-style-of = cell style
-    .change = Change…
-    .fill-alignment = Fill and alignment
-    .line-card = Line
-    .apply-edges = Edges to apply
-    .edges-hint = Click an edge set to give it the line on the left.
-    .table-card = Table
-    .preview-short = Preview
-    .used-none = No cells use this style
-    .used-some = Used by tables of this style
-    .new-cell-style = New cell style
-    .selected-style = Selected style
-    .usage = Usage
-    .manage-help = Pick a cell style: rename it in place, delete it or add a new one. OK keeps the changes, Cancel restores them.
+    .rows = 行
+    .table-count = { $count } 個の表
+    .table-styles = 表スタイル
+    .cell-style-of = セル スタイル
+    .change = 変更…
+    .fill-alignment = 塗り潰しと位置合わせ
+    .line-card = 線
+    .apply-edges = 適用するエッジ
+    .edges-hint = エッジのセットをクリックすると、左の線が適用されます。
+    .table-card = 表
+    .preview-short = プレビュー
+    .used-none = このスタイルを使用するセルはありません
+    .used-some = このスタイルの表で使用中
+    .new-cell-style = 新しいセル スタイル
+    .selected-style = 選択したスタイル
+    .usage = 使用状況
+    .manage-help = セル スタイルを選択: その場で名前を変更、削除、または新規追加します。OK で変更を保持し、キャンセルで元に戻します。
     .create-entry = Create new cell style…
     .manage-entry = Manage cell styles…
     .new-button = New…
@@ -8944,7 +8947,6 @@ table-style-cells =
     .table-direction = 表の方向
 
 table-cells =
-    .use-current = Use current units and precision
     .borders-title = セルの枠線
     .contents-title = セルの内容
     .line = 線
@@ -9854,8 +9856,8 @@ doc-tabs =
     .above-palettes = パレットの上にタブ
 
 text-style =
-    .styles-title = Text styles
-    .used-count = Used: { $count }
+    .styles-title = 文字スタイル
+    .used-count = 使用: { $count }
     .invalid-width =
         Invalid Width Factor, please enter a new value.
 

@@ -7074,7 +7074,8 @@ dimstyle =
     .surveyors-units = Landmeeteenheden
 
 style-manager =
-    .only-used = Only styles in use
+    .current-badge = huidig
+    .only-used = Alleen gebruikte stijlen
     .use-big-font = Use Big Font
     .number-field-range = Use digits and a decimal point. Enter a value from __ocs_fmt_0__ to __ocs_fmt_1__.
     .number-field-non-negative = Enter 0 or a positive number.
@@ -8883,21 +8884,26 @@ block-value-set =
     .y-distance = Y-afstand
 
 table-style-cells =
-    .table-styles = Table styles
-    .cell-style-of = cell style
-    .change = Change…
-    .fill-alignment = Fill and alignment
-    .line-card = Line
-    .apply-edges = Edges to apply
-    .edges-hint = Click an edge set to give it the line on the left.
-    .table-card = Table
-    .preview-short = Preview
-    .used-none = No cells use this style
-    .used-some = Used by tables of this style
-    .new-cell-style = New cell style
-    .selected-style = Selected style
-    .usage = Usage
-    .manage-help = Pick a cell style: rename it in place, delete it or add a new one. OK keeps the changes, Cancel restores them.
+    .rows = Rijen
+    .table-count = { $count ->
+        [one] { $count } tabel
+       *[other] { $count } tabellen
+    }
+    .table-styles = Tabelstijlen
+    .cell-style-of = celstijl
+    .change = Wijzigen…
+    .fill-alignment = Opvulling en uitlijning
+    .line-card = Lijn
+    .apply-edges = Toe te passen randen
+    .edges-hint = Klik op een randenset om er de lijn links op toe te passen.
+    .table-card = Tabel
+    .preview-short = Voorbeeld
+    .used-none = Geen cel gebruikt deze stijl
+    .used-some = Gebruikt door tabellen van deze stijl
+    .new-cell-style = Nieuwe celstijl
+    .selected-style = Geselecteerde stijl
+    .usage = Gebruik
+    .manage-help = Kies een celstijl: hernoem hem ter plaatse, verwijder hem of voeg een nieuwe toe. OK behoudt de wijzigingen, Annuleren herstelt ze.
     .create-entry = Create new cell style…
     .manage-entry = Manage cell styles…
     .new-button = New…
@@ -8964,7 +8970,6 @@ table-style-cells =
     .table-direction = Tabelrichting
 
 table-cells =
-    .use-current = Use current units and precision
     .borders-title = Celranden
     .contents-title = Celinhoud
     .line = Lijn
@@ -9874,8 +9879,8 @@ doc-tabs =
     .above-palettes = Tabbladen boven de paletten
 
 text-style =
-    .styles-title = Text styles
-    .used-count = Used: { $count }
+    .styles-title = Tekststijlen
+    .used-count = In gebruik: { $count }
     .invalid-width =
         Invalid Width Factor, please enter a new value.
 

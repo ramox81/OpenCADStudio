@@ -7076,7 +7076,8 @@ dimstyle =
     .surveyors-units = Геодезически единици
 
 style-manager =
-    .only-used = Only styles in use
+    .current-badge = текущ
+    .only-used = Само използвани стилове
     .use-big-font = Use Big Font
     .number-field-range = Use digits and a decimal point. Enter a value from __ocs_fmt_0__ to __ocs_fmt_1__.
     .number-field-non-negative = Enter 0 or a positive number.
@@ -8885,21 +8886,26 @@ block-value-set =
     .y-distance = Разстояние Y
 
 table-style-cells =
-    .table-styles = Table styles
-    .cell-style-of = cell style
-    .change = Change…
-    .fill-alignment = Fill and alignment
-    .line-card = Line
-    .apply-edges = Edges to apply
-    .edges-hint = Click an edge set to give it the line on the left.
-    .table-card = Table
-    .preview-short = Preview
-    .used-none = No cells use this style
-    .used-some = Used by tables of this style
-    .new-cell-style = New cell style
-    .selected-style = Selected style
-    .usage = Usage
-    .manage-help = Pick a cell style: rename it in place, delete it or add a new one. OK keeps the changes, Cancel restores them.
+    .rows = Редове
+    .table-count = { $count ->
+        [one] { $count } таблица
+       *[other] { $count } таблици
+    }
+    .table-styles = Стилове на таблици
+    .cell-style-of = стил на клетка
+    .change = Промяна…
+    .fill-alignment = Запълване и подравняване
+    .line-card = Линия
+    .apply-edges = Ръбове за прилагане
+    .edges-hint = Щракнете върху група ръбове, за да им приложите линията отляво.
+    .table-card = Таблица
+    .preview-short = Преглед
+    .used-none = Нито една клетка не използва този стил
+    .used-some = Използва се от таблици с този стил
+    .new-cell-style = Нов стил на клетка
+    .selected-style = Избран стил
+    .usage = Използване
+    .manage-help = Изберете стил на клетка: преименувайте го на място, изтрийте го или добавете нов. „OK“ запазва промените, „Отказ“ ги възстановява.
     .create-entry = Create new cell style…
     .manage-entry = Manage cell styles…
     .new-button = New…
@@ -8966,7 +8972,6 @@ table-style-cells =
     .table-direction = Посока на таблица
 
 table-cells =
-    .use-current = Use current units and precision
     .borders-title = Рамки на клетки
     .contents-title = Съдържание на клетка
     .line = Линия
@@ -9876,8 +9881,8 @@ doc-tabs =
     .above-palettes = Раздели над палитрите
 
 text-style =
-    .styles-title = Text styles
-    .used-count = Used: { $count }
+    .styles-title = Текстови стилове
+    .used-count = Използван: { $count }
     .invalid-width =
         Invalid Width Factor, please enter a new value.
 

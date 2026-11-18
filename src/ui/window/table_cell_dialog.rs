@@ -52,7 +52,6 @@ pub enum TableCellDialogMsg {
     FormatUnit(usize),
     Precision(String),
     /// "Use current units and precision" in Cell Data Format.
-    UseCurrent(bool),
     Symbol(String),
     Append(bool),
     Negative(bool),
@@ -961,7 +960,8 @@ pub fn view_format<'a>(
             }
         }));
         let selected = precisions[state.precision.min(9)].clone();
-        let enabled = !(matches!(state.kind, 0 | 3 | 6) && state.unit == 0);
+        // "(none)" and "Current units" take the drawing's precision.
+        let enabled = !(matches!(state.kind, 0 | 3 | 6) && state.unit <= 1);
         let precision: Element<'a, Message> = if enabled {
             pick_list(Some(selected), precisions, |value| value.clone())
                 .on_select(|value| msg(M::Precision(value)))
@@ -973,17 +973,6 @@ pub fn view_format<'a>(
             text(selected).size(11).style(muted_style).into()
         };
         settings = settings.push(labelled(crate::tr!("table-cells", "precision"), precision));
-    }
-    if matches!(state.kind, 0 | 3 | 6) {
-        let current = state.unit == 1 && state.precision == 0;
-        settings = settings.push(row![
-            Space::new().width(Length::Fixed(118.0)),
-            iced::widget::checkbox(current)
-                .label(crate::tr!("table-cells", "use-current"))
-                .on_toggle(|on| msg(M::UseCurrent(on)))
-                .size(14)
-                .text_size(11),
-        ]);
     }
     if state.kind == 1 {
         let symbol_input: Option<fn(String) -> TableCellDialogMsg> = Some(M::Symbol);

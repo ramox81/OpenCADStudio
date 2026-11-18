@@ -38,6 +38,8 @@ pub fn item<'a>(
     can_rename: bool,
     info: Option<StyleRow>,
     on_right: Option<Message>,
+    // A pill in place of the count: "current", or the count with its unit.
+    badge: Option<String>,
 ) -> Element<'a, Message> {
     if rename_active == Some(name) {
         text_input("", rename_buf)
@@ -79,7 +81,29 @@ pub fn item<'a>(
             }));
         }
         let mut label = label.push(name_text);
-        if let Some(info) = info {
+        if let Some(badge) = badge {
+            label = label.push(
+                container(text(badge).size(10).wrapping(iced::widget::text::Wrapping::None))
+                    .padding([0, 7])
+                    // On the selected row the pill is a tint of its text.
+                    .style(move |theme: &Theme| {
+                        if is_selected {
+                            let pair = theme.palette().primary.strong;
+                            container::Style {
+                                background: Some(Background::Color(pair.text.scale_alpha(0.22))),
+                                text_color: Some(pair.text),
+                                border: iced::Border {
+                                    radius: 6.0.into(),
+                                    ..Default::default()
+                                },
+                                ..Default::default()
+                            }
+                        } else {
+                            crate::ui::window::pdf_dialogs::well_style(theme)
+                        }
+                    }),
+            );
+        } else if let Some(info) = info {
             let count = text(info.count.to_string())
                 .size(10)
                 .width(COUNT_W)

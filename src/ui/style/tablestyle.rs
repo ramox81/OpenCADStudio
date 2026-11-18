@@ -101,6 +101,10 @@ pub struct TableStyleView<'a> {
     pub format_sample: String,
     /// A table of the style uses the cell style Manage Cell Styles shows.
     pub manage_in_use: bool,
+    /// Each listed style's table count, in `styles` order.
+    pub rows: Vec<crate::ui::style::style_manager::StyleRow>,
+    /// A table of the style uses the edited cell style.
+    pub cell_in_use: bool,
 }
 
 /// The name a cell style shows: the three row styles by their role.
@@ -579,11 +583,24 @@ fn grid_row<'a>(
 }
 
 /// One choice out of a few, as joined buttons.
-fn segmented<'a>(options: Vec<(Cow<'static, str>, bool, Message)>) -> Element<'a, Message> {
+fn segmented<'a>(
+    options: Vec<(Option<&'static [u8]>, Cow<'static, str>, bool, Message)>,
+) -> Element<'a, Message> {
     let buttons: Vec<Element<'a, Message>> = options
         .into_iter()
-        .map(|(label, on, message)| {
-            button(text(label).size(11))
+        .map(|(icon, label, on, message)| {
+            let mut content = row![].spacing(5).align_y(iced::Center);
+            if let Some(icon) = icon {
+                content = content.push(crate::ui::icons::tinted(icon, 11.0, move |theme: &Theme| {
+                    let palette = theme.palette();
+                    if on {
+                        palette.primary.base.text
+                    } else {
+                        palette.background.weak.text
+                    }
+                }));
+            }
+            button(content.push(text(label).size(11)))
                 .on_press(message)
                 .style(crate::ui::style::form::button_style(on))
                 .padding([4, 12])
@@ -670,6 +687,17 @@ fn cell_column<'a>(v: &TableStyleView<'a>, style: &'a TableStyle) -> Element<'a,
         .into_iter()
         .map(|cell| {
             let on = cell.name.eq_ignore_ascii_case(v.cell);
+            if let (true, Some(typed)) = (on, v.cards.quick_rename.as_ref()) {
+                return text_input("", typed)
+                    .id(iced::widget::Id::new(QUICK_RENAME_ID))
+                    .on_input(|value| cells(TsCellMsg::QuickRenameText(value)))
+                    .on_submit(cells(TsCellMsg::QuickRenameCommit))
+                    .style(crate::ui::style::form::field_style)
+                    .size(11)
+                    .padding([5, 8])
+                    .width(Length::Fill)
+                    .into();
+            }
             let content = row![
                 cell_swatch(&cell.cell_style),
                 text(cell_style_label(&cell.name)).size(11)
@@ -699,6 +727,8 @@ fn cell_column<'a>(v: &TableStyleView<'a>, style: &'a TableStyle) -> Element<'a,
         })
         .collect();
     let user = !document::objects::is_row_cell_style(v.cell);
+    // A cell style a table of the style uses is renamed, not deleted.
+    let deletable = user && !v.cell_in_use;
     let plus = button(crate::ui::icons::tinted(
         crate::ui::icons::PLUS,
         12.0,
@@ -710,17 +740,24 @@ fn cell_column<'a>(v: &TableStyleView<'a>, style: &'a TableStyle) -> Element<'a,
     let trash = button(crate::ui::icons::tinted_faded(
         crate::ui::icons::TRASH,
         13.0,
-        if user { 1.0 } else { 0.42 },
+        if deletable { 1.0 } else { 0.42 },
         |theme: &Theme| theme.palette().background.base.text,
     ))
-    .on_press_maybe(user.then(|| cells(TsCellMsg::QuickDelete)))
+    .on_press_maybe(deletable.then(|| cells(TsCellMsg::QuickDelete)))
     .style(crate::ui::style::form::button_style(false))
     .padding([5, 8]);
     let rename = button(
-        text(tr!("table-style-cells", "rename"))
-            .size(11)
-            .width(Length::Fill)
-            .align_x(iced::Center),
+        row![
+            crate::ui::icons::tinted_faded(
+                crate::ui::icons::PENCIL,
+                12.0,
+                if user { 1.0 } else { 0.42 },
+                |theme: &Theme| theme.palette().background.base.text,
+            ),
+            text(tr!("table-style-cells", "rename")).size(11),
+        ]
+        .spacing(6)
+        .align_y(iced::Center),
     )
     .on_press_maybe(user.then(|| cells(TsCellMsg::QuickRename)))
     .style(crate::ui::style::form::button_style(false))
@@ -744,8 +781,7 @@ fn cell_column<'a>(v: &TableStyleView<'a>, style: &'a TableStyle) -> Element<'a,
         .height(110),
     )
     .style(well_style);
-    container(
-        column![
+    let mut column_body = column![
             row![
                 card_heading(tr!("table-style-cells", "cell-styles")),
                 Space::new().width(Length::Fill),
@@ -756,14 +792,48 @@ fn cell_column<'a>(v: &TableStyleView<'a>, style: &'a TableStyle) -> Element<'a,
                 .padding(4)
                 .width(Length::Fill)
                 .style(well_style),
-            row![rename, trash].spacing(6),
-            manage,
-            Space::new().height(6),
-            card_heading(tr!("table-style-cells", "preview-short")),
-            preview,
         ]
-        .spacing(8),
-    )
+        .spacing(8);
+    if let Some(notice) = &v.cards.quick_notice {
+        column_body = column_body.push(
+            container(crate::ui::style::textstyle::name_notice_lines(notice))
+                .padding([6, 8])
+                .width(Length::Fill)
+                .style(well_style),
+        );
+    }
+    if v.cards.quick_delete {
+        column_body = column_body.push(
+            container(
+                column![
+                    text(tr!("table-style-cells", "delete-ask")).size(11),
+                    row![
+                        button(text(tr!("table-style-cells", "delete")).size(11))
+                            .on_press(cells(TsCellMsg::QuickDeleteAnswer(true)))
+                            .style(crate::ui::style::form::button_style(true))
+                            .padding([4, 10]),
+                        button(text(tr!("table-style-cells", "cancel")).size(11))
+                            .on_press(cells(TsCellMsg::QuickDeleteAnswer(false)))
+                            .style(crate::ui::style::form::button_style(false))
+                            .padding([4, 10]),
+                    ]
+                    .spacing(6),
+                ]
+                .spacing(6),
+            )
+            .padding([6, 8])
+            .width(Length::Fill)
+            .style(well_style),
+        );
+    }
+    let column_body = column_body.extend([
+            row![rename, trash].spacing(6).into(),
+            manage.into(),
+            Space::new().height(6).into(),
+            card_heading(tr!("table-style-cells", "preview-short")),
+            preview.into(),
+        ]);
+    container(column_body)
     .padding(10)
     .width(Length::Fixed(200.0))
     .style(card_style)
@@ -772,12 +842,12 @@ fn cell_column<'a>(v: &TableStyleView<'a>, style: &'a TableStyle) -> Element<'a,
 
 /// Fill and alignment: fill colour, alignment with its 3×3 indicator and
 /// the cell type.
-fn fill_card<'a>(v: &TableStyleView<'a>, cell: &NamedTableCellStyle) -> Element<'a, Message> {
+fn fill_card<'a>(v: &TableStyleView<'a>, cell: &NamedTableCellStyle) -> (Option<String>, Element<'a, Message>) {
     let data = &cell.cell_style;
     let alignment = data.content_format.cell_alignment;
     let data_type = cell.style_type == 2;
-    crate::ui::window::pdf_dialogs::card(
-        tr!("table-style-cells", "fill-alignment"),
+    (
+        Some(tr!("table-style-cells", "fill-alignment")),
         column![
             grid_row(
                 t!("Fill color"),
@@ -805,6 +875,7 @@ fn fill_card<'a>(v: &TableStyleView<'a>, cell: &NamedTableCellStyle) -> Element<
                 t!("Type"),
                 segmented(vec![
                     (
+                        None,
                         t!("Data"),
                         data_type,
                         Message::TableStyleCellEdit {
@@ -813,6 +884,7 @@ fn fill_card<'a>(v: &TableStyleView<'a>, cell: &NamedTableCellStyle) -> Element<
                         }
                     ),
                     (
+                        None,
                         t!("Label"),
                         !data_type,
                         Message::TableStyleCellEdit {
@@ -823,12 +895,13 @@ fn fill_card<'a>(v: &TableStyleView<'a>, cell: &NamedTableCellStyle) -> Element<
                 ])
             ),
         ]
-        .spacing(8),
+        .spacing(8)
+            .into(),
     )
 }
 
 /// The data format with its sample and Change…, and the cell margins.
-fn format_card<'a>(v: &TableStyleView<'a>) -> Element<'a, Message> {
+fn format_card<'a>(v: &TableStyleView<'a>) -> (Option<String>, Element<'a, Message>) {
     let margin = |field: &'static str, value: &'a str| -> Element<'a, Message> {
         text_input("1.5", value)
             .on_input(move |value| Message::TableStyleCellEdit { field, value })
@@ -837,8 +910,8 @@ fn format_card<'a>(v: &TableStyleView<'a>) -> Element<'a, Message> {
             .width(80)
             .into()
     };
-    crate::ui::window::pdf_dialogs::card(
-        t!("Format").into_owned(),
+    (
+        Some(t!("Format").into_owned()),
         column![
             row![
                 crate::ui::read_only::field(&v.format_sample, 11.0, Length::Fill),
@@ -860,7 +933,8 @@ fn format_card<'a>(v: &TableStyleView<'a>) -> Element<'a, Message> {
             .spacing(10)
             .align_y(iced::Center),
         ]
-        .spacing(8),
+        .spacing(8)
+            .into(),
     )
 }
 
@@ -921,7 +995,7 @@ fn text_card<'a>(v: &TableStyleView<'a>, cell: &NamedTableCellStyle) -> Element<
 
 /// The line the edge tiles apply: lineweight and linetype with their
 /// samples, colour, double line and its spacing.
-fn line_card<'a>(v: &TableStyleView<'a>) -> Element<'a, Message> {
+fn line_card<'a>(v: &TableStyleView<'a>) -> (Option<String>, Element<'a, Message>) {
     use crate::ui::style::mleaderstyle::{pattern_sample, sample_list, weight_sample};
     let border = v.border;
     let weight =
@@ -1011,8 +1085,8 @@ fn line_card<'a>(v: &TableStyleView<'a>) -> Element<'a, Message> {
     if border.double {
         spacing = spacing.on_input(|value| cells(TsCellMsg::BorderSpacing(value)));
     }
-    crate::ui::window::pdf_dialogs::card(
-        tr!("table-style-cells", "line-card"),
+    (
+        Some(tr!("table-style-cells", "line-card")),
         column![
             grid_row(tr!("table-cells", "lineweight").into(), lineweight),
             grid_row(tr!("table-cells", "linetype").into(), linetype),
@@ -1030,7 +1104,8 @@ fn line_card<'a>(v: &TableStyleView<'a>) -> Element<'a, Message> {
             .spacing(10)
             .align_y(iced::Center),
         ]
-        .spacing(8),
+        .spacing(8)
+            .into(),
     )
 }
 
@@ -1102,7 +1177,7 @@ const TILE_ORDER: [(usize, i32); 8] = [
 
 /// The edges to apply the line to: a tile per edge set, the last one
 /// applied highlighted.
-fn edges_card<'a>(v: &TableStyleView<'a>) -> Element<'a, Message> {
+fn edges_card<'a>(v: &TableStyleView<'a>) -> (Option<String>, Element<'a, Message>) {
     let tiles: Vec<Element<'a, Message>> = TILE_ORDER
         .iter()
         .map(|&(index, mask)| {
@@ -1148,15 +1223,16 @@ fn edges_card<'a>(v: &TableStyleView<'a>) -> Element<'a, Message> {
             .into()
         })
         .collect();
-    crate::ui::window::pdf_dialogs::card(
-        tr!("table-style-cells", "apply-edges"),
+    (
+        Some(tr!("table-style-cells", "apply-edges")),
         column![
             row(tiles).spacing(6).wrap().vertical_spacing(6),
             text(tr!("table-style-cells", "edges-hint"))
                 .size(10)
                 .style(muted_style),
         ]
-        .spacing(8),
+        .spacing(8)
+            .into(),
     )
 }
 
@@ -1192,21 +1268,27 @@ fn table_card<'a>(v: &TableStyleView<'a>, style: &TableStyle) -> Element<'a, Mes
     } else {
         format!("{}: {}", t!("Different"), v.comparison_sections.join(", "))
     };
-    crate::ui::window::pdf_dialogs::card(
-        tr!("table-style-cells", "table-card"),
-        column![
-            text(status).size(10).style(muted_style),
-            grid_row(
-                t!("Description"),
-                text_input("", v.description)
-                    .on_input(|value| Message::TableStyleEdit {
-                        field: "description",
-                        value,
-                    })
-                    .style(crate::ui::style::form::field_style)
-                    .size(11)
-                    .width(Length::Fill)
-            ),
+    use crate::ui::window::pdf_dialogs::{card_style, well_style};
+    let input = text_input("", v.description)
+        .on_input(|value| Message::TableStyleEdit {
+            field: "description",
+            value,
+        })
+        .style(crate::ui::style::form::field_style)
+        .size(11)
+        .width(Length::Fill);
+    let mut body = column![
+        row![
+            card_heading(tr!("table-style-cells", "table-card")),
+            Space::new().width(Length::Fill),
+            container(text(status).size(10))
+                .padding([1, 8])
+                .style(well_style),
+        ]
+        .align_y(iced::Center),
+        grid_row(t!("Description"), input),
+        grid_row(
+            Cow::Owned(tr!("table-style-cells", "rows")),
             row![
                 checkbox(style.title_suppressed)
                     .label(t!("Suppress title row"))
@@ -1218,43 +1300,59 @@ fn table_card<'a>(v: &TableStyleView<'a>, style: &TableStyle) -> Element<'a, Mes
                     .on_toggle(|_| Message::TableStyleToggle("header_sup"))
                     .size(14)
                     .text_size(11),
-                checkbox(style.annotative)
-                    .label(t!("Annotative"))
-                    .on_toggle(|_| Message::TableStyleToggleAnnotative)
-                    .size(14)
-                    .text_size(11),
             ]
             .spacing(18)
-            .wrap(),
-            grid_row(
-                t!("Starting table"),
-                row![
-                    text(template_summary).size(11).width(Length::Fill),
-                    button(text(t!("Select table…")).size(11))
-                        .on_press(Message::TableStyleTemplatePick)
-                        .style(crate::ui::style::form::button_style(false))
-                        .padding([4, 10]),
-                    remove,
-                ]
-                .spacing(6)
-                .align_y(iced::Center)
-            ),
-            crate::ui::style::style_manager::comparison_row(Some(
-                crate::ui::style::style_manager::EditorComparison {
-                    selected: v.compare_name.clone(),
-                    options: v.compare_opts.clone(),
-                    summary,
-                    on_select: Message::TableStyleDialogCompare,
-                }
-            )),
-        ]
-        .spacing(8),
-    )
+            .wrap()
+        ),
+        grid_row(
+            t!("Annotative"),
+            checkbox(style.annotative)
+                .on_toggle(|_| Message::TableStyleToggleAnnotative)
+                .size(14)
+        ),
+        grid_row(
+            t!("Starting table"),
+            row![
+                text(template_summary).size(11).width(Length::Fill),
+                button(text(t!("Select table…")).size(11))
+                    .on_press(Message::TableStyleTemplatePick)
+                    .style(crate::ui::style::form::button_style(false))
+                    .padding([4, 10]),
+                remove,
+            ]
+            .spacing(6)
+            .align_y(iced::Center)
+        ),
+    ]
+    .spacing(8);
+    if !v.compare_opts.is_empty() {
+        body = body.push(grid_row(
+            t!("Compare with"),
+            row![
+                crate::ui::dropdown_list::pick_list(
+                    Some(v.compare_name.clone()),
+                    v.compare_opts.clone(),
+                    |value| value.to_string(),
+                )
+                .on_select(Message::TableStyleDialogCompare)
+                .text_size(11)
+                .width(180),
+                text(summary).size(10).style(muted_style),
+            ]
+            .spacing(10)
+            .align_y(iced::Center),
+        ));
+    }
+    container(body)
+        .padding([10, 12])
+        .width(Length::Fill)
+        .style(card_style)
+        .into()
 }
 
 /// The single page: the cell style column beside the editor's cards.
 fn page<'a>(v: &TableStyleView<'a>, style: &'a TableStyle) -> Element<'a, Message> {
-    use crate::ui::window::pdf_dialogs::{accent_text, card_style};
+    use crate::ui::window::pdf_dialogs::{accent_text, card_row, card_style};
     let Some(cell) = style.cell_style(v.cell) else {
         return text(t!("Select a style to view details.")).size(11).into();
     };
@@ -1271,8 +1369,18 @@ fn page<'a>(v: &TableStyleView<'a>, style: &'a TableStyle) -> Element<'a, Messag
             .style(muted_style),
             Space::new().width(Length::Fill),
             segmented(vec![
-                (t!("Down"), !up, Message::TableStyleSetFlow("Down".into())),
-                (t!("Up"), up, Message::TableStyleSetFlow("Up".into())),
+                (
+                    Some(crate::ui::icons::ARROW_DOWN),
+                    t!("Down"),
+                    !up,
+                    Message::TableStyleSetFlow("Down".into())
+                ),
+                (
+                    Some(crate::ui::icons::ARROW_UP),
+                    t!("Up"),
+                    up,
+                    Message::TableStyleSetFlow("Up".into())
+                ),
             ]),
         ]
         .spacing(10)
@@ -1296,10 +1404,10 @@ fn page<'a>(v: &TableStyleView<'a>, style: &'a TableStyle) -> Element<'a, Messag
     .style(card_style);
     let cards = column![
         header,
-        row![fill_card(v, cell), format_card(v)].spacing(12),
+        card_row(vec![fill_card(v, cell), format_card(v)], 12.0),
         merge,
         text_card(v, cell),
-        row![line_card(v), edges_card(v)].spacing(12),
+        card_row(vec![line_card(v), edges_card(v)], 12.0),
         table_card(v, style),
     ]
     .spacing(12)
@@ -1377,6 +1485,13 @@ pub struct TsCards {
     pub linetype: Option<String>,
     pub load: Option<crate::ui::style::mleaderstyle::LoadDraft>,
     pub reload_ask: Option<crate::ui::style::mleaderstyle::ReloadAsk>,
+    /// The cell style list's own rename: the name being typed for the
+    /// edited cell style.
+    pub quick_rename: Option<String>,
+    /// Why the typed name was refused.
+    pub quick_notice: Option<NameNotice>,
+    /// The list's Delete asks before the edited cell style goes.
+    pub quick_delete: bool,
 }
 
 /// The line properties the Borders page applies with its buttons. They
@@ -1433,11 +1548,14 @@ pub enum TsCellMsg {
     ManageCancel,
     /// "?" in Manage Cell Styles.
     ManageHelp,
-    /// Rename / Delete beside the cell style list: Manage Cell Styles
-    /// opens on the edited cell style with its name ready or the
-    /// question asked.
+    /// Rename / Delete under the cell style list act on the edited cell
+    /// style in place: its row turns into a name field, or the question
+    /// shows under the list.
     QuickRename,
+    QuickRenameText(String),
+    QuickRenameCommit,
     QuickDelete,
+    QuickDeleteAnswer(bool),
     /// Format "…": the Cell Data Format window for the cell style.
     FormatOpen,
     /// Text style "…": the Text Style manager.
@@ -1524,6 +1642,8 @@ fn create_card<'a>(draft: &CreateCell, style: &TableStyle) -> Element<'a, Messag
 
 pub const CREATE_NAME_ID: &str = "ts-cell-new-name";
 pub const RENAME_ID: &str = "ts-cell-rename";
+/// The cell style list's own rename field.
+pub const QUICK_RENAME_ID: &str = "ts-cell-quick-rename";
 
 fn manage_card<'a>(manage: &ManageCells, style: &TableStyle, in_use: bool) -> Element<'a, Message> {
     use crate::ui::style::form::{button_style, dialog_button};
@@ -1652,14 +1772,16 @@ fn manage_card<'a>(manage: &ManageCells, style: &TableStyle, in_use: bool) -> El
         ),
         row![
             action(
-                None,
+                Some(crate::ui::icons::PENCIL),
                 tr!("table-style-cells", "rename"),
                 user.then(|| cells(TsCellMsg::RenameStart))
             ),
+            // A cell style a table of the style uses can be renamed, not
+            // deleted.
             action(
                 Some(crate::ui::icons::TRASH),
                 tr!("table-style-cells", "delete"),
-                user.then(|| cells(TsCellMsg::DeleteAsk))
+                (user && !in_use).then(|| cells(TsCellMsg::DeleteAsk))
             ),
         ]
         .spacing(8),
@@ -1851,15 +1973,17 @@ pub fn view_window<'a>(
         on_list_scroll: None,
         in_use_filter: Some((v.in_use_only, Message::TableStyleListInUse)),
         apply_blocked: None,
-        rows: None,
+        rows: Some(&v.rows),
         compact: false,
         apply_pending: true,
-        delete_in_use: false,
+        // Delete answers itself for a style tables use.
+        delete_in_use: true,
         on_context: None,
         context_menu: None,
         list: None,
         extra_actions: Vec::new(),
         list_title: Some(Cow::Owned(tr!("table-style-cells", "table-styles"))),
+        count_label: Some(|count| tr!("table-style-cells", "table-count", count = count)),
         editor,
     });
     with_card(window, &v)

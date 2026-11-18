@@ -1178,6 +1178,7 @@ impl OpenCADStudio {
                             comparison_sections: comparison_sections.clone(),
                             read_only,
                             usage: usage.clone(),
+                            usage_open: self.textstyle_usage_open,
                             font_buf: &draft.style.font_file,
                             width_buf: &draft.width.text,
                             oblique_buf: &draft.oblique.text,
@@ -1456,6 +1457,38 @@ impl OpenCADStudio {
                 let manage_in_use = self.ts_cards.manage.as_ref().is_some_and(|manage| {
                     self.table_cell_style_in_use(self.active_tab, &manage.selected)
                 });
+                let cell_in_use = self.table_cell_style_in_use(self.active_tab, &self.ts_cell);
+                // Each listed style's table count.
+                let table_rows: Vec<crate::ui::style::style_manager::StyleRow> = {
+                    let doc = &tab.scene.document;
+                    let handles: Vec<Option<document::Handle>> = styles
+                        .iter()
+                        .map(|name| {
+                            doc.objects.iter().find_map(|(handle, object)| match object {
+                                ObjectType::TableStyle(s) if s.name == *name => Some(*handle),
+                                _ => None,
+                            })
+                        })
+                        .collect();
+                    let mut counts = vec![0usize; styles.len()];
+                    for entity in doc.entities() {
+                        if let document::entities::EntityType::Table(table) = entity {
+                            if let Some(at) = handles
+                                .iter()
+                                .position(|handle| handle.is_some() && *handle == table.table_style_handle)
+                            {
+                                counts[at] += 1;
+                            }
+                        }
+                    }
+                    counts
+                        .into_iter()
+                        .map(|count| crate::ui::style::style_manager::StyleRow {
+                            count,
+                            ..Default::default()
+                        })
+                        .collect()
+                };
                 sized_flow(ex, 1240, 760, |flow| {
                     crate::ui::style::tablestyle::view_window(
                         crate::ui::style::tablestyle::TableStyleView {
@@ -1511,6 +1544,8 @@ impl OpenCADStudio {
                             color_open: self.ts_color_open,
                             format_sample: format_sample.clone(),
                             manage_in_use,
+                            cell_in_use,
+                            rows: table_rows.clone(),
                         },
                         flow,
                     )

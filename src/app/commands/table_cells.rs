@@ -1200,19 +1200,15 @@ impl OpenCADStudio {
                     state.precision = if matches!(state.kind, 1 | 5) { 3 } else { 0 };
                     state.append = state.kind == 5;
                 }
-                M::FormatUnit(unit) => state.unit = unit,
-                M::UseCurrent(on) => {
-                    // On: current units and precision; off: decimal units,
-                    // keeping a chosen precision.
-                    if on {
-                        state.unit = 1;
-                        state.precision = 0;
+                M::FormatUnit(unit) => {
+                    // A unit of its own starts at two decimals, an angle
+                    // other than decimal degrees at the current precision.
+                    state.unit = unit;
+                    state.precision = if unit >= 2 && !(state.kind == 0 && unit != 2) {
+                        3
                     } else {
-                        state.unit = 2;
-                        if state.precision == 0 {
-                            state.precision = 5;
-                        }
-                    }
+                        0
+                    };
                 }
                 M::Precision(value) => {
                     state.precision = if value.contains('.') {

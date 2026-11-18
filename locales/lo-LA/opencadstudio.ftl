@@ -7077,7 +7077,8 @@ dimstyle =
     .surveyors-units = ຫົວໜ່ວຍການສຳຫຼວດ
 
 style-manager =
-    .only-used = Only styles in use
+    .current-badge = ປັດຈຸບັນ
+    .only-used = ສະເພາະຮູບແບບທີ່ໃຊ້ຢູ່
     .use-big-font = Use Big Font
     .number-field-range = Use digits and a decimal point. Enter a value from __ocs_fmt_0__ to __ocs_fmt_1__.
     .number-field-non-negative = Enter 0 or a positive number.
@@ -8876,21 +8877,23 @@ block-value-set =
     .y-distance = ໄລຍະຫ່າງ Y
 
 table-style-cells =
-    .table-styles = Table styles
-    .cell-style-of = cell style
-    .change = Change…
-    .fill-alignment = Fill and alignment
-    .line-card = Line
-    .apply-edges = Edges to apply
-    .edges-hint = Click an edge set to give it the line on the left.
-    .table-card = Table
-    .preview-short = Preview
-    .used-none = No cells use this style
-    .used-some = Used by tables of this style
-    .new-cell-style = New cell style
-    .selected-style = Selected style
-    .usage = Usage
-    .manage-help = Pick a cell style: rename it in place, delete it or add a new one. OK keeps the changes, Cancel restores them.
+    .rows = ແຖວ
+    .table-count = { $count } ຕາຕະລາງ
+    .table-styles = ຮູບແບບຕາຕະລາງ
+    .cell-style-of = ຮູບແບບຫ້ອງ
+    .change = ປ່ຽນ…
+    .fill-alignment = ການຕື່ມ ແລະ ການຈັດວາງ
+    .line-card = ເສັ້ນ
+    .apply-edges = ຂອບທີ່ຈະນຳໃຊ້
+    .edges-hint = ຄລິກຊຸດຂອບເພື່ອໃຫ້ມັນໄດ້ເສັ້ນທາງຊ້າຍ.
+    .table-card = ຕາຕະລາງ
+    .preview-short = ຕົວຢ່າງ
+    .used-none = ບໍ່ມີຫ້ອງໃດໃຊ້ຮູບແບບນີ້
+    .used-some = ຕາຕະລາງຂອງຮູບແບບນີ້ໃຊ້ຢູ່
+    .new-cell-style = ຮູບແບບຫ້ອງໃໝ່
+    .selected-style = ຮູບແບບທີ່ເລືອກ
+    .usage = ການໃຊ້ງານ
+    .manage-help = ເລືອກຮູບແບບຫ້ອງ: ປ່ຽນຊື່ຢູ່ບ່ອນ, ລຶບ ຫຼື ເພີ່ມອັນໃໝ່. ຕົກລົງ ຮັກສາການປ່ຽນແປງ, ຍົກເລີກ ກູ້ຄືນ.
     .create-entry = Create new cell style…
     .manage-entry = Manage cell styles…
     .new-button = New…
@@ -8957,7 +8960,6 @@ table-style-cells =
     .table-direction = ທິດທາງຕາຕະລາງ
 
 table-cells =
-    .use-current = Use current units and precision
     .borders-title = ເສັ້ນຂອບຫ້ອງ
     .contents-title = ເນື້ອໃນຫ້ອງ
     .line = ເສັ້ນ
@@ -9867,8 +9869,8 @@ doc-tabs =
     .above-palettes = ແຖບຢູ່ເທິງແຜງ
 
 text-style =
-    .styles-title = Text styles
-    .used-count = Used: { $count }
+    .styles-title = ຮູບແບບຂໍ້ຄວາມ
+    .used-count = ໃຊ້ຢູ່: { $count }
     .invalid-width =
         Invalid Width Factor, please enter a new value.
 

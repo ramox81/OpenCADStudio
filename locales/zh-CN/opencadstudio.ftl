@@ -7059,7 +7059,8 @@ dimstyle =
     .surveyors-units = 测量单位
 
 style-manager =
-    .only-used = Only styles in use
+    .current-badge = 当前
+    .only-used = 仅使用中的样式
     .use-big-font = Use Big Font
     .number-field-range = Use digits and a decimal point. Enter a value from __ocs_fmt_0__ to __ocs_fmt_1__.
     .number-field-non-negative = Enter 0 or a positive number.
@@ -8858,21 +8859,23 @@ block-value-set =
     .y-distance = Y 距离
 
 table-style-cells =
-    .table-styles = Table styles
-    .cell-style-of = cell style
-    .change = Change…
-    .fill-alignment = Fill and alignment
-    .line-card = Line
-    .apply-edges = Edges to apply
-    .edges-hint = Click an edge set to give it the line on the left.
-    .table-card = Table
-    .preview-short = Preview
-    .used-none = No cells use this style
-    .used-some = Used by tables of this style
-    .new-cell-style = New cell style
-    .selected-style = Selected style
-    .usage = Usage
-    .manage-help = Pick a cell style: rename it in place, delete it or add a new one. OK keeps the changes, Cancel restores them.
+    .rows = 行
+    .table-count = { $count } 个表格
+    .table-styles = 表格样式
+    .cell-style-of = 单元样式
+    .change = 更改…
+    .fill-alignment = 填充和对齐
+    .line-card = 线条
+    .apply-edges = 要应用的边
+    .edges-hint = 单击一组边，将左侧的线条应用到这些边。
+    .table-card = 表格
+    .preview-short = 预览
+    .used-none = 没有单元使用此样式
+    .used-some = 此样式的表格正在使用
+    .new-cell-style = 新建单元样式
+    .selected-style = 选定样式
+    .usage = 使用情况
+    .manage-help = 选择一个单元样式：就地重命名、删除或新建。“确定”保留更改，“取消”恢复原样。
     .create-entry = Create new cell style…
     .manage-entry = Manage cell styles…
     .new-button = New…
@@ -8939,7 +8942,6 @@ table-style-cells =
     .table-direction = 表格方向
 
 table-cells =
-    .use-current = Use current units and precision
     .borders-title = 单元格边框
     .contents-title = 单元格内容
     .line = 线
@@ -9849,8 +9851,8 @@ doc-tabs =
     .above-palettes = 选项卡位于选项板上方
 
 text-style =
-    .styles-title = Text styles
-    .used-count = Used: { $count }
+    .styles-title = 文字样式
+    .used-count = 已使用：{ $count }
     .invalid-width =
         Invalid Width Factor, please enter a new value.
 

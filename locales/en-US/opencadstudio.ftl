@@ -7077,6 +7077,7 @@ dimstyle =
     .surveyors-units = Surveyor's units
 
 style-manager =
+    .current-badge = current
     .only-used = Only styles in use
     .use-big-font = Use Big Font
     .number-field-range = Use digits and a decimal point. Enter a value from __ocs_fmt_0__ to __ocs_fmt_1__.
@@ -8559,6 +8560,11 @@ table-cmd =
     .styles-in-use = Styles in use
 
 table-style-cells =
+    .rows = Rows
+    .table-count = { $count ->
+        [one] { $count } table
+       *[other] { $count } tables
+    }
     .table-styles = Table styles
     .cell-style-of = cell style
     .change = Change…
@@ -8860,7 +8866,6 @@ array-grips = Item count
     .prompt-item-angle = Specify the angle between items:
     .prompt-radius = Specify radius:
 table-cells =
-    .use-current = Use current units and precision
     .borders-title = Cell Borders
     .contents-title = Cell Contents
     .line = Line

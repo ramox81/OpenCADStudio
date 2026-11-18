@@ -354,6 +354,43 @@ pub(crate) fn card<'a>(
     .into()
 }
 
+/// Cards side by side, each as tall as the tallest: the contents lay the
+/// row out and the card backgrounds fill it from below (a fill height has
+/// no size inside a scrolled page).
+pub(crate) fn card_row<'a>(
+    cards: Vec<(Option<String>, Element<'a, Message>)>,
+    spacing: f32,
+) -> Element<'a, Message> {
+    let backs = cards
+        .iter()
+        .map(|_| {
+            container(Space::new())
+                .width(Fill)
+                .height(Fill)
+                .style(card_style)
+                .into()
+        })
+        .collect::<Vec<Element<'a, Message>>>();
+    let bodies = cards
+        .into_iter()
+        .map(|(title, content)| {
+            let mut body = column![].spacing(8);
+            if let Some(title) = title {
+                body = body.push(text(title.to_uppercase()).size(10).style(accent_text));
+            }
+            container(body.push(content))
+                .padding([10, 12])
+                .width(Fill)
+                .into()
+        })
+        .collect::<Vec<Element<'a, Message>>>();
+    iced::widget::Stack::new()
+        .width(Fill)
+        .push(row(bodies).spacing(spacing))
+        .push_under(row(backs).spacing(spacing).height(Fill))
+        .into()
+}
+
 /// One choice out of a few, as joined buttons.
 fn segmented<'a, T: Copy + PartialEq + 'a>(
     options: Vec<(T, String)>,

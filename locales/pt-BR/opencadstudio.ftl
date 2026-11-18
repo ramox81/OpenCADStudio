@@ -7076,7 +7076,8 @@ dimstyle =
     .surveyors-units = Unidades de agrimensura
 
 style-manager =
-    .only-used = Only styles in use
+    .current-badge = atual
+    .only-used = Somente estilos em uso
     .use-big-font = Use Big Font
     .number-field-range = Use digits and a decimal point. Enter a value from __ocs_fmt_0__ to __ocs_fmt_1__.
     .number-field-non-negative = Enter 0 or a positive number.
@@ -8885,21 +8886,26 @@ block-value-set =
     .y-distance = Distância Y
 
 table-style-cells =
-    .table-styles = Table styles
-    .cell-style-of = cell style
-    .change = Change…
-    .fill-alignment = Fill and alignment
-    .line-card = Line
-    .apply-edges = Edges to apply
-    .edges-hint = Click an edge set to give it the line on the left.
-    .table-card = Table
-    .preview-short = Preview
-    .used-none = No cells use this style
-    .used-some = Used by tables of this style
-    .new-cell-style = New cell style
-    .selected-style = Selected style
-    .usage = Usage
-    .manage-help = Pick a cell style: rename it in place, delete it or add a new one. OK keeps the changes, Cancel restores them.
+    .rows = Linhas
+    .table-count = { $count ->
+        [one] { $count } tabela
+       *[other] { $count } tabelas
+    }
+    .table-styles = Estilos de tabela
+    .cell-style-of = estilo de célula
+    .change = Alterar…
+    .fill-alignment = Preenchimento e alinhamento
+    .line-card = Linha
+    .apply-edges = Bordas a aplicar
+    .edges-hint = Clique em um conjunto de bordas para aplicar a ele a linha à esquerda.
+    .table-card = Tabela
+    .preview-short = Visualização
+    .used-none = Nenhuma célula usa este estilo
+    .used-some = Usado por tabelas deste estilo
+    .new-cell-style = Novo estilo de célula
+    .selected-style = Estilo selecionado
+    .usage = Uso
+    .manage-help = Escolha um estilo de célula: renomeie-o no lugar, exclua-o ou adicione um novo. OK mantém as alterações, Cancelar as desfaz.
     .create-entry = Create new cell style…
     .manage-entry = Manage cell styles…
     .new-button = New…
@@ -8966,7 +8972,6 @@ table-style-cells =
     .table-direction = Direção da tabela
 
 table-cells =
-    .use-current = Use current units and precision
     .borders-title = Bordas da célula
     .contents-title = Conteúdo da célula
     .line = Linha
@@ -9876,8 +9881,8 @@ doc-tabs =
     .above-palettes = Abas acima das paletas
 
 text-style =
-    .styles-title = Text styles
-    .used-count = Used: { $count }
+    .styles-title = Estilos de texto
+    .used-count = Em uso: { $count }
     .invalid-width =
         Invalid Width Factor, please enter a new value.
 

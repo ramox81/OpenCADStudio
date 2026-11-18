@@ -6999,6 +6999,7 @@ dimstyle =
     .surveyors-units = Haritacılık birimleri
 
 style-manager =
+    .current-badge = geçerli
     .only-used = Yalnız kullanılanlar
     .use-big-font = Büyük Yazı Tipi Kullan
     .number-field-range = Rakam ve ondalık nokta kullanın. __ocs_fmt_0__ ile __ocs_fmt_1__ arasında bir değer girin.
@@ -8479,6 +8480,8 @@ table-cmd =
     .styles-in-use = Kullanılan stiller
 
 table-style-cells =
+    .rows = Satırlar
+    .table-count = { $count } tablo
     .table-styles = Tablo stilleri
     .cell-style-of = hücre stili
     .change = Değiştir…
@@ -8780,7 +8783,6 @@ array-grips = Öğe sayısı
     .prompt-item-angle = Öğeler arası açıyı belirtin:
     .prompt-radius = Yarıçapı belirtin:
 table-cells =
-    .use-current = Geçerli birim ve hassasiyeti kullan
     .borders-title = Hücre Kenarlıkları
     .contents-title = Hücre İçeriği
     .line = Çizgi

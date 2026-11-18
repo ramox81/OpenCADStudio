@@ -125,6 +125,11 @@ impl OpenCADStudio {
     /// here or read from an older file only has its three rows) and fills
     /// the editor buffers from the edited cell style.
     pub(in crate::app) fn load_tablestyle_bufs(&mut self, tab: usize) {
+        // The cell style list's own rename or delete question ends with the
+        // editor's values.
+        self.ts_cards.quick_rename = None;
+        self.ts_cards.quick_notice = None;
+        self.ts_cards.quick_delete = false;
         let text_styles: Vec<(String, document::Handle)> = self.tabs[tab]
             .scene
             .document

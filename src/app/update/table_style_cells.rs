@@ -174,17 +174,61 @@ impl OpenCADStudio {
             TsCellMsg::ManageHelp => self
                 .command_line
                 .push_info(crate::tr!("table-style-cells", "manage-help").as_str()),
-            TsCellMsg::QuickRename | TsCellMsg::QuickDelete => {
+            TsCellMsg::QuickRename => {
                 if document::objects::is_row_cell_style(&self.ts_cell) {
                     return Task::none();
                 }
-                let rename = matches!(message, TsCellMsg::QuickRename);
-                let _ = self.on_table_style_cells(TsCellMsg::ManageOpen);
-                return self.on_table_style_cells(if rename {
-                    TsCellMsg::RenameStart
-                } else {
-                    TsCellMsg::DeleteAsk
-                });
+                self.ts_cards.quick_delete = false;
+                self.ts_cards.quick_notice = None;
+                let label = cell_style_label(&self.ts_cell).into_owned();
+                self.ts_cards.quick_rename = Some(label);
+                return iced::widget::operation::focus(iced::widget::Id::new(
+                    crate::ui::style::tablestyle::QUICK_RENAME_ID,
+                ));
+            }
+            TsCellMsg::QuickRenameText(value) => {
+                if let Some(typed) = self.ts_cards.quick_rename.as_mut() {
+                    *typed = value;
+                }
+            }
+            TsCellMsg::QuickRenameCommit => {
+                let Some(typed) = self.ts_cards.quick_rename.take() else {
+                    return Task::none();
+                };
+                let old = self.ts_cell.clone();
+                match self.ts_rename_cell(&old, &typed) {
+                    Ok(Some(new_name)) => {
+                        self.ts_cards.quick_notice = None;
+                        self.ts_cell = new_name;
+                        self.load_tablestyle_bufs(i);
+                    }
+                    Ok(None) => self.ts_cards.quick_notice = None,
+                    Err(notice) => {
+                        // The name stays in the field with why it is refused.
+                        self.ts_cards.quick_notice = Some(notice);
+                        self.ts_cards.quick_rename = Some(typed);
+                    }
+                }
+            }
+            TsCellMsg::QuickDelete => {
+                let name = self.ts_cell.clone();
+                if !document::objects::is_row_cell_style(&name)
+                    && !self.table_cell_style_in_use(i, &name)
+                {
+                    self.ts_cards.quick_rename = None;
+                    self.ts_cards.quick_notice = None;
+                    self.ts_cards.quick_delete = true;
+                }
+            }
+            TsCellMsg::QuickDeleteAnswer(yes) => {
+                let asked = std::mem::take(&mut self.ts_cards.quick_delete);
+                if yes && asked {
+                    let name = self.ts_cell.clone();
+                    if let Some(next) = self.ts_delete_cell(&name) {
+                        self.ts_cell = next;
+                    }
+                    self.load_tablestyle_bufs(i);
+                }
             }
             TsCellMsg::FormatOpen => self.ts_format_open(),
             TsCellMsg::TextStyles => return self.ts_open_text_styles(),
@@ -336,7 +380,6 @@ impl OpenCADStudio {
     /// The inline rename ends: an empty name keeps the old one, a taken or
     /// unusable one is refused.
     fn ts_rename_commit(&mut self) {
-        let i = self.active_tab;
         let Some((old, typed)) = self
             .ts_cards
             .manage
@@ -345,36 +388,78 @@ impl OpenCADStudio {
         else {
             return;
         };
-        if typed.trim().is_empty() || typed.trim() == old {
-            return;
-        }
-        let notice = self
-            .ts_style()
-            .and_then(|style| cell_name_notice(style, &typed, Some(&old)));
-        if let Some(notice) = notice {
-            if let Some(manage) = self.ts_cards.manage.as_mut() {
-                manage.notice = Some(notice);
+        match self.ts_rename_cell(&old, &typed) {
+            Ok(Some(new_name)) => {
+                if let Some(manage) = self.ts_cards.manage.as_mut() {
+                    manage.selected = new_name;
+                }
             }
-            return;
+            Ok(None) => {}
+            Err(notice) => {
+                if let Some(manage) = self.ts_cards.manage.as_mut() {
+                    manage.notice = Some(notice);
+                }
+            }
+        }
+    }
+
+    /// Renames a user cell style: an empty or unchanged name keeps the old
+    /// one (`Ok(None)`), a taken or unusable one is refused. Tables keep
+    /// their cells' style: they name it by number, not by name.
+    fn ts_rename_cell(&mut self, old: &str, typed: &str) -> Result<Option<String>, NameNotice> {
+        let i = self.active_tab;
+        if typed.trim().is_empty() || typed.trim() == old {
+            return Ok(None);
+        }
+        if let Some(notice) = self
+            .ts_style()
+            .and_then(|style| cell_name_notice(style, typed, Some(old)))
+        {
+            return Err(notice);
         }
         let new_name = typed.trim().to_string();
         let renamed = self
             .tablestyle_mut(i)
-            .is_some_and(|style| style.rename_cell_style(&old, &new_name));
-        if renamed {
-            if self.ts_cell.eq_ignore_ascii_case(&old) {
-                self.ts_cell = new_name.clone();
-            }
-            if let Some(manage) = self.ts_cards.manage.as_mut() {
-                manage.selected = new_name;
-            }
+            .is_some_and(|style| style.rename_cell_style(old, &new_name));
+        if !renamed {
+            return Ok(None);
         }
+        if self.ts_cell.eq_ignore_ascii_case(old) {
+            self.ts_cell = new_name.clone();
+        }
+        Ok(Some(new_name))
+    }
+
+    /// Deletes a user cell style no table of the style uses; returns the
+    /// cell style above it (below, for the first) to select.
+    fn ts_delete_cell(&mut self, name: &str) -> Option<String> {
+        let i = self.active_tab;
+        if self.table_cell_style_in_use(i, name) {
+            return None;
+        }
+        let above = self.ts_style().and_then(|style| {
+            let list = sorted_cell_styles(style);
+            let at = list
+                .iter()
+                .position(|cell| cell.name.eq_ignore_ascii_case(name))?;
+            list.get(at.saturating_sub(1))
+                .filter(|_| at > 0)
+                .or_else(|| list.get(at + 1))
+                .map(|cell| cell.name.clone())
+        });
+        let deleted = self.tablestyle_mut(i).is_some_and(|style| {
+            let deleted = style.delete_cell_style(name);
+            if deleted {
+                style.sync_rows_from_cell_styles();
+            }
+            deleted
+        });
+        deleted.then_some(above).flatten()
     }
 
     /// Delete's question answered: a cell style a table of the style uses
     /// stays; otherwise it goes and the one above it is selected.
     fn ts_delete_answer(&mut self, yes: bool) {
-        let i = self.active_tab;
         let Some(manage) = self.ts_cards.manage.as_mut() else {
             return;
         };
@@ -384,29 +469,10 @@ impl OpenCADStudio {
             return;
         }
         let name = manage.selected.clone();
-        if self.table_cell_style_in_use(i, &name) {
+        if let Some(above) = self.ts_delete_cell(&name) {
             if let Some(manage) = self.ts_cards.manage.as_mut() {
-                manage.in_use = true;
+                manage.selected = above;
             }
-            return;
-        }
-        let above = self.ts_style().and_then(|style| {
-            let list = sorted_cell_styles(style);
-            let at = list
-                .iter()
-                .position(|cell| cell.name.eq_ignore_ascii_case(&name))?;
-            list.get(at.saturating_sub(1))
-                .filter(|_| at > 0)
-                .or_else(|| list.get(at + 1))
-                .map(|cell| cell.name.clone())
-        });
-        if let Some(style) = self.tablestyle_mut(i) {
-            if style.delete_cell_style(&name) {
-                style.sync_rows_from_cell_styles();
-            }
-        }
-        if let (Some(manage), Some(above)) = (self.ts_cards.manage.as_mut(), above) {
-            manage.selected = above;
         }
     }
 
@@ -421,7 +487,9 @@ impl OpenCADStudio {
         let border = self.ts_border.clone();
         let linetype = u64::from_str_radix(border.linetype.trim(), 16)
             .map(document::Handle::new)
-            .unwrap_or(document::Handle::NULL);
+            .ok()
+            .filter(|handle| !handle.is_null())
+            .unwrap_or_else(|| self.ts_by_block_linetype());
         let spacing = crate::entities::common::parse_f64(&border.spacing).filter(|v| *v > 0.0);
         self.edit_table_cell_style(|cell| {
             for edge in TABLE_GRID_EDGES.iter().copied().filter(|edge| mask & edge != 0) {
@@ -445,6 +513,53 @@ impl OpenCADStudio {
                 data.set_edge_hidden(edge, false);
             }
         });
+    }
+
+    /// The drawing's ByBlock linetype record: what a ByBlock edge names.
+    fn ts_by_block_linetype(&self) -> document::Handle {
+        self.tabs[self.active_tab]
+            .scene
+            .document
+            .line_types
+            .iter()
+            .find(|lt| lt.name.eq_ignore_ascii_case("ByBlock"))
+            .map_or(document::Handle::NULL, |lt| lt.handle)
+    }
+
+    /// Apply writes every edge of the edited table style's cell styles
+    /// as the window shows it: an edge without a linetype names the
+    /// ByBlock record, and an edge without a double line spacing gets a
+    /// quarter of the data text height.
+    pub(in crate::app) fn ts_settle_grids(&mut self) {
+        let i = self.active_tab;
+        let by_block = self.ts_by_block_linetype();
+        let Some(style) = self.tablestyle_mut(i) else {
+            return;
+        };
+        let data_height = style
+            .cell_style(document::objects::DATA_CELL_STYLE)
+            .map_or(style.data_row_style.text_height, |cell| {
+                cell.cell_style.content_format.text_height
+            });
+        let mut changed = false;
+        for (_, cell) in style.modern_overrides.iter_mut() {
+            let data = &mut cell.cell_style;
+            for edge in TABLE_GRID_EDGES {
+                let missing = data.grid(edge).is_none();
+                let grid = data.grid_mut(edge);
+                if grid.line_type.is_null() && !by_block.is_null() {
+                    grid.line_type = by_block;
+                    changed = true;
+                }
+                if missing || grid.border.double_line_spacing == 0.0 {
+                    grid.border.double_line_spacing = 0.25 * data_height;
+                    changed = true;
+                }
+            }
+        }
+        if changed {
+            style.sync_rows_from_cell_styles();
+        }
     }
 
     /// The border linetype's name, for Select Linetype.
