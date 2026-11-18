@@ -205,7 +205,21 @@ fn rgb(color: &document::types::Color) -> Option<Color> {
     }
 }
 
-fn preview_cell(style: &TableCellStyleData) -> PreviewCell {
+/// The linetypes the preview draws dashed: those with a pattern (ByBlock,
+/// ByLayer and Continuous draw solid).
+fn dashed_linetypes(v: &TableStyleView<'_>) -> Vec<document::Handle> {
+    v.linetypes
+        .iter()
+        .filter(|(name, _)| {
+            v.linetype_rows
+                .iter()
+                .any(|row| row.name.eq_ignore_ascii_case(name) && !row.pattern.is_empty())
+        })
+        .map(|(_, handle)| *handle)
+        .collect()
+}
+
+fn preview_cell(style: &TableCellStyleData, dashed: &[document::Handle]) -> PreviewCell {
     let format = &style.content_format;
     let edges = std::array::from_fn(|slot| {
         let edge = TABLE_GRID_EDGES[slot];
@@ -220,7 +234,7 @@ fn preview_cell(style: &TableCellStyleData) -> PreviewCell {
             double: grid.is_some_and(|grid| {
                 grid.border.border_type == document::objects::TableBorderType::Double
             }),
-            dashed: grid.is_some_and(|grid| !grid.line_type.is_null()),
+            dashed: grid.is_some_and(|grid| dashed.contains(&grid.line_type)),
         }
     });
     PreviewCell {
@@ -441,12 +455,14 @@ impl canvas::Program<Message> for TablePreviewCanvas {
 /// The general page's preview: the starting table, or a title, a header and
 /// three data rows.
 fn table_preview(v: &TableStyleView<'_>, style: &TableStyle) -> PreviewLayout {
+    let dashed = dashed_linetypes(v);
+    let dashed = dashed.as_slice();
     let by_id = |id: i32, fallback: &str| {
         style
             .cell_style_by_id(id)
             .or_else(|| style.cell_style(fallback))
-            .map(|cell| preview_cell(&cell.cell_style))
-            .unwrap_or_else(|| preview_cell(&TableCellStyleData::default()))
+            .map(|cell| preview_cell(&cell.cell_style, dashed))
+            .unwrap_or_else(|| preview_cell(&TableCellStyleData::default(), dashed))
     };
     let flow_up = style.flow_direction == document::objects::TableFlowDirection::Up;
     if let Some(table) = v.template {
@@ -491,8 +507,8 @@ fn table_preview(v: &TableStyleView<'_>, style: &TableStyle) -> PreviewLayout {
         })
     };
     let preview = |cell: Option<&NamedTableCellStyle>| {
-        cell.map(|cell| preview_cell(&cell.cell_style))
-            .unwrap_or_else(|| preview_cell(&TableCellStyleData::default()))
+        cell.map(|cell| preview_cell(&cell.cell_style, dashed))
+            .unwrap_or_else(|| preview_cell(&TableCellStyleData::default(), dashed))
     };
     let mut rows = vec![preview(title), preview(header)];
     let mut heights = vec![height(title), height(header)];
@@ -1645,7 +1661,12 @@ pub const RENAME_ID: &str = "ts-cell-rename";
 /// The cell style list's own rename field.
 pub const QUICK_RENAME_ID: &str = "ts-cell-quick-rename";
 
-fn manage_card<'a>(manage: &ManageCells, style: &TableStyle, in_use: bool) -> Element<'a, Message> {
+fn manage_card<'a>(
+    manage: &ManageCells,
+    style: &TableStyle,
+    in_use: bool,
+    dashed: Vec<document::Handle>,
+) -> Element<'a, Message> {
     use crate::ui::style::form::{button_style, dialog_button};
     use crate::ui::window::pdf_dialogs::{card_style, well_style};
     if manage.delete_ask || manage.in_use {
@@ -1755,7 +1776,7 @@ fn manage_card<'a>(manage: &ManageCells, style: &TableStyle, in_use: bool) -> El
     let selected_cell = style.cell_style(&manage.selected);
     let preview = container(
         canvas(TablePreviewCanvas {
-            layout: rows_preview(style, selected_cell, &label),
+            layout: rows_preview(&dashed, style, selected_cell, &label),
         })
         .width(Length::Fixed(300.0))
         .height(120),
@@ -1817,13 +1838,14 @@ fn manage_card<'a>(manage: &ManageCells, style: &TableStyle, in_use: bool) -> El
 /// The Manage Cell Styles preview: the title and header rows, then two
 /// rows of the selected cell style named after it.
 fn rows_preview(
+    dashed: &[document::Handle],
     style: &TableStyle,
     selected: Option<&NamedTableCellStyle>,
     label: &str,
 ) -> PreviewLayout {
     let preview = |cell: Option<&NamedTableCellStyle>| {
-        cell.map(|cell| preview_cell(&cell.cell_style))
-            .unwrap_or_else(|| preview_cell(&TableCellStyleData::default()))
+        cell.map(|cell| preview_cell(&cell.cell_style, dashed))
+            .unwrap_or_else(|| preview_cell(&TableCellStyleData::default(), dashed))
     };
     let title = style.cell_style(document::objects::TITLE_CELL_STYLE);
     let header = style.cell_style(document::objects::HEADER_CELL_STYLE);
@@ -1907,7 +1929,7 @@ fn card_view<'a>(v: &TableStyleView<'a>) -> Option<(Element<'a, Message>, Messag
             return Some((notice_card(notice), cells(TsCellMsg::NoticeClose)));
         }
         return Some((
-            manage_card(manage, style, v.manage_in_use),
+            manage_card(manage, style, v.manage_in_use, dashed_linetypes(v)),
             cells(TsCellMsg::ManageCancel),
         ));
     }
