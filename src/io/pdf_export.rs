@@ -500,6 +500,33 @@ fn render_pdf_bytes_impl(
     plot_style: Option<&PlotStyleTable>,
     include_geopdf: bool,
 ) -> Result<Vec<u8>, String> {
+    let mut lo = render_pdf_document(pages, plot_style, FontEmbedding::Subset)?;
+    let precise = if include_geopdf {
+        crate::io::geopdf_export::apply_metadata(&mut lo, pages)?
+    } else {
+        Vec::new()
+    };
+    crate::io::geopdf_export::save_document(&mut lo, &precise)
+}
+
+/// How the faces embedded-font text is drawn with go into the file.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FontEmbedding {
+    /// Each face reduced to the glyphs the pages use: the smallest single file.
+    Subset,
+    /// A plain TrueType face of up to 4 MB whole, its glyph ids unchanged:
+    /// every drawing of a published set then embeds the same program, which
+    /// the set writes once instead of a subset per drawing.
+    Whole,
+}
+
+/// Render pages to a PDF document not yet serialised, without geospatial
+/// metadata: the sheet-list PUBLISH appends it to the set it is writing.
+pub(crate) fn render_pdf_document(
+    pages: &[PdfPageInput],
+    plot_style: Option<&PlotStyleTable>,
+    fonts_as: FontEmbedding,
+) -> Result<lopdf::Document, String> {
     // A style the table lacks plots with Normal here; the automation export
     // checks `validate_plot_styles` up front and refuses instead.
     let mut doc = PdfDocument::new("Open CAD Studio Export");
@@ -529,7 +556,7 @@ fn render_pdf_bytes_impl(
     }
     // Subset and embed the TrueType faces the text was drawn with, now that
     // every page has recorded which glyphs it uses.
-    text_fonts.install(&mut doc);
+    text_fonts.install(&mut doc, fonts_as);
     let mut warnings = Vec::new();
     // printpdf 0.9's `optimize` is a no-op (its `doc.compress()` is commented
     // out), so every page's content stream — megabytes of vector operators
@@ -562,14 +589,26 @@ fn render_pdf_bytes_impl(
             }
         }
     }
+    // Every page as compact as it draws the same.
+    crate::io::pdf_compact::compact_document(&mut lo);
     shadings.install(&mut lo);
     compress_font_programs(&mut lo);
-    let precise = if include_geopdf {
-        crate::io::geopdf_export::apply_metadata(&mut lo, pages)?
-    } else {
-        Vec::new()
-    };
-    crate::io::geopdf_export::save_document(&mut lo, &precise)
+    let annotations = pages
+        .iter()
+        .enumerate()
+        .flat_map(|(index, page)| {
+            page_link_annotations(page)
+                .into_iter()
+                .map(move |(rect, action)| (index, rect, action))
+        })
+        .collect();
+    let destinations = pages
+        .iter()
+        .enumerate()
+        .filter_map(|(index, page)| Some((index, page.content.destination.clone()?)))
+        .collect();
+    install_links(&mut lo, annotations, destinations);
+    Ok(lo)
 }
 
 /// printpdf embeds the font programs uncompressed, tens of kilobytes a face
@@ -618,6 +657,249 @@ fn compress_font_programs(doc: &mut lopdf::Document) {
     }
 }
 
+/// What a link annotation opens.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum LinkAction {
+    /// A page of the same file, by its destination name.
+    Destination(String),
+    /// An address the viewer opens.
+    Uri(String),
+}
+
+/// The link annotations of a page: the area each linked object covers on
+/// the page, in points (`[x0, y0, x1, y1]`), and what it opens. The area is
+/// the object's plotted ink, or its own bounds where it plots none, mapped
+/// to the page as the page draws it and cut to the plot window and sheet.
+pub(crate) fn page_link_annotations(page: &PdfPageInput) -> Vec<([f32; 4], LinkAction)> {
+    let content = &page.content;
+    if content.links.is_empty() {
+        return Vec::new();
+    }
+    let (ox, oy) = (page.offset_x, page.offset_y);
+    let s = page.scale as f64;
+    if !(s.is_finite() && s > 0.0) {
+        return Vec::new();
+    }
+    let marker_h = page.paper_h / s;
+    let wanted: std::collections::HashSet<document::Handle> = content
+        .links
+        .iter()
+        .filter_map(|link| link.entity)
+        .collect();
+    let mut areas: std::collections::HashMap<document::Handle, [f64; 4]> =
+        std::collections::HashMap::new();
+    let mut add = |handle: document::Handle, [x0, y0, x1, y1]: [f64; 4]| {
+        let area = areas.entry(handle).or_insert([x0, y0, x1, y1]);
+        *area = [
+            area[0].min(x0),
+            area[1].min(y0),
+            area[2].max(x1),
+            area[3].max(y1),
+        ];
+    };
+    for wire in content.wires.iter() {
+        let Some(handle) = crate::scene::Scene::handle_from_wire_name(&wire.wire.name) else {
+            continue;
+        };
+        if wanted.contains(&handle) {
+            if let Some(bounds) = wire_sheet_bounds(&wire.wire, ox, oy, marker_h) {
+                add(handle, bounds);
+            }
+        }
+    }
+    for hatch in content.hatches.iter().chain(&content.wipeouts) {
+        if let Some(handle) = hatch.entity.filter(|handle| wanted.contains(handle)) {
+            if let Some(bounds) = hatch_sheet_bounds(hatch, ox, oy) {
+                add(handle, bounds);
+            }
+        }
+    }
+    // The page's own mapping: content turn, then page rotation and scale.
+    let (paper_w, paper_h) = (page.paper_w, page.paper_h);
+    let (cos, sin, tx, ty) = match page.rotation_deg {
+        90 => (0.0, 1.0, paper_w, 0.0),
+        180 => (-1.0, 0.0, paper_w, paper_h),
+        270 => (0.0, -1.0, 0.0, paper_h),
+        _ => (1.0, 0.0, 0.0, 0.0),
+    };
+    let k = MM_TO_PT as f64;
+    let clip = page
+        .clip
+        .map(|(cx, cy, cw, ch)| [cx as f64, cy as f64, (cx + cw) as f64, (cy + ch) as f64]);
+    let mut annotations = Vec::new();
+    for link in &content.links {
+        let area = link
+            .entity
+            .and_then(|handle| areas.get(&handle).copied())
+            .or_else(|| {
+                link.bounds
+                    .map(|[x0, y0, x1, y1]| [x0 + ox, y0 + oy, x1 + ox, y1 + oy])
+            });
+        let Some(area) = area else {
+            continue;
+        };
+        let action = match (&link.destination, link.url.trim()) {
+            (Some(name), _) => LinkAction::Destination(name.clone()),
+            (None, "") => continue,
+            (None, url) => LinkAction::Uri(link_uri(url, link.is_web())),
+        };
+        let mut turned = crate::io::plot::turned_bounds(page.content_rotation, area);
+        if let Some(window) = clip {
+            turned = [
+                turned[0].max(window[0]),
+                turned[1].max(window[1]),
+                turned[2].min(window[2]),
+                turned[3].min(window[3]),
+            ];
+            if turned[2] <= turned[0] || turned[3] <= turned[1] {
+                continue;
+            }
+        }
+        let mut rect = [
+            f64::INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NEG_INFINITY,
+        ];
+        for (x, y) in [
+            (turned[0], turned[1]),
+            (turned[2], turned[1]),
+            (turned[2], turned[3]),
+            (turned[0], turned[3]),
+        ] {
+            let px = (cos * s * x - sin * s * y + tx) * k;
+            let py = (sin * s * x + cos * s * y + ty) * k;
+            rect = [
+                rect[0].min(px),
+                rect[1].min(py),
+                rect[2].max(px),
+                rect[3].max(py),
+            ];
+        }
+        let rect = [
+            rect[0].max(0.0),
+            rect[1].max(0.0),
+            rect[2].min(paper_w * k),
+            rect[3].min(paper_h * k),
+        ];
+        // Less than a point across is nothing to click.
+        if !(rect[2] - rect[0] >= 1.0 && rect[3] - rect[1] >= 1.0) {
+            continue;
+        }
+        annotations.push((rect.map(|v| v as f32), action));
+    }
+    annotations
+}
+
+/// A link address as a URI: a web address as it is, a file as a relative
+/// reference or a `file:` URI, with what a URI cannot hold %-escaped.
+fn link_uri(url: &str, web: bool) -> String {
+    let url = if web {
+        url.to_string()
+    } else {
+        let path = url.replace('\\', "/");
+        if path.starts_with('/') {
+            format!("file://{path}")
+        } else if path.as_bytes().get(1) == Some(&b':') {
+            // A Windows drive.
+            format!("file:///{path}")
+        } else {
+            path
+        }
+    };
+    let mut out = String::with_capacity(url.len());
+    for byte in url.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-._~:/?#[]@!$&'()*+,;=%".contains(&byte) {
+            out.push(byte as char);
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
+}
+
+/// Put the link annotations on their pages, and name the pages links reach
+/// in the catalog's destination name tree.
+pub(crate) fn install_links(
+    doc: &mut lopdf::Document,
+    annotations: Vec<(usize, [f32; 4], LinkAction)>,
+    destinations: Vec<(usize, String)>,
+) {
+    use lopdf::{Dictionary, Object, StringFormat};
+    let pages: Vec<lopdf::ObjectId> = doc.get_pages().into_values().collect();
+    for (page, rect, action) in annotations {
+        let Some(&page_id) = pages.get(page) else {
+            continue;
+        };
+        let annotation = doc.add_object(link_annotation(rect, &action));
+        if let Ok(page) = doc.get_dictionary_mut(page_id) {
+            if !matches!(page.get(b"Annots"), Ok(Object::Array(_))) {
+                page.set("Annots", Object::Array(Vec::new()));
+            }
+            if let Ok(Object::Array(list)) = page.get_mut(b"Annots") {
+                list.push(Object::Reference(annotation));
+            }
+        }
+    }
+    let mut names: Vec<(String, lopdf::ObjectId)> = destinations
+        .into_iter()
+        .filter_map(|(page, name)| Some((name, *pages.get(page)?)))
+        .collect();
+    if names.is_empty() {
+        return;
+    }
+    // A name tree lists its keys in order.
+    names.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
+    names.dedup_by(|a, b| a.0 == b.0);
+    let mut list = Vec::with_capacity(names.len() * 2);
+    for (name, page) in names {
+        list.push(Object::String(name.into_bytes(), StringFormat::Literal));
+        list.push(Object::Array(vec![
+            Object::Reference(page),
+            Object::Name(b"Fit".to_vec()),
+        ]));
+    }
+    let tree = Dictionary::from_iter([("Names", Object::Array(list))]);
+    if let Ok(catalog) = doc.catalog_mut() {
+        catalog.set(
+            "Names",
+            Dictionary::from_iter([("Dests", Object::Dictionary(tree))]),
+        );
+    }
+}
+
+/// A link annotation over `rect` (points) without a border, opening `action`.
+pub(crate) fn link_annotation(rect: [f32; 4], action: &LinkAction) -> lopdf::Dictionary {
+    use lopdf::{Dictionary, Object, StringFormat};
+    let action = match action {
+        LinkAction::Destination(name) => Dictionary::from_iter([
+            ("S", Object::Name(b"GoTo".to_vec())),
+            (
+                "D",
+                Object::String(name.clone().into_bytes(), StringFormat::Literal),
+            ),
+        ]),
+        LinkAction::Uri(uri) => Dictionary::from_iter([
+            ("S", Object::Name(b"URI".to_vec())),
+            (
+                "URI",
+                Object::String(uri.clone().into_bytes(), StringFormat::Literal),
+            ),
+        ]),
+    };
+    Dictionary::from_iter([
+        ("Type", Object::Name(b"Annot".to_vec())),
+        ("Subtype", Object::Name(b"Link".to_vec())),
+        (
+            "Rect",
+            Object::Array(rect.iter().map(|&v| Object::Real(v)).collect()),
+        ),
+        ("Border", Object::Array(vec![0.into(), 0.into(), 0.into()])),
+        ("H", Object::Name(b"I".to_vec())),
+        ("A", Object::Dictionary(action)),
+    ])
+}
+
 fn append_pdf_page(
     doc: &mut PdfDocument,
     image_resources: &mut std::collections::HashMap<(usize, u32, u32), printpdf::XObjectId>,
@@ -647,6 +929,7 @@ fn append_pdf_page(
         group_splits,
         entity_layers,
         entity_plot_styles,
+        ..
     } = &page.content;
     let (paper_w, paper_h) = (page.paper_w as f32, page.paper_h as f32);
     let (ox, oy) = (page.offset_x, page.offset_y);
@@ -3126,10 +3409,24 @@ impl TextFonts {
     /// Subset each face to its used glyphs, renumber those glyphs in the page
     /// streams, and register the fonts under the ids the pages already use.
     /// A face that fails to subset is embedded whole, ids unchanged.
-    fn install(self, doc: &mut PdfDocument) {
+    fn install(self, doc: &mut PdfDocument, fonts_as: FontEmbedding) {
         // A face only probed by `embeds_all` for a run that kept its outlines
         // draws nothing.
         for font in self.fonts.into_iter().filter(|font| !font.used.is_empty()) {
+            // A collection cannot be embedded as it is; a big face is subset.
+            let plain_truetype = font.blob.index == 0
+                && font.blob.data.len() <= 4 << 20
+                && (font.blob.data.starts_with(&[0, 1, 0, 0])
+                    || font.blob.data.starts_with(b"true"));
+            if fonts_as == FontEmbedding::Whole && plain_truetype {
+                if let Some(parsed) = parsed_with_widths(font.blob.data.clone(), 0) {
+                    doc.resources
+                        .fonts
+                        .map
+                        .insert(font.id, PdfFont::new(parsed));
+                    continue;
+                }
+            }
             // `.notdef` must stay glyph 0; the subset numbers glyphs in list order.
             let gids: Vec<u16> = std::iter::once(0)
                 .chain(font.used.keys().copied().filter(|&gid| gid != 0))
@@ -3651,7 +3948,8 @@ mod tests {
                 .windows(3)
                 .filter_map(|items| (items[2] == "l").then(|| items[0].parse().unwrap()))
                 .collect();
-            if ends.len() != 1 || (ends[0] - 12.0 * MM_TO_PT).abs() >= 0.001 {
+            // Coordinates are written to 0.01 pt (`pdf_compact`).
+            if ends.len() != 1 || (ends[0] - 12.0 * MM_TO_PT).abs() > 0.005 {
                 missing.push((stationed, ends));
             }
         }
@@ -3683,7 +3981,8 @@ mod tests {
             .filter_map(|items| (items[2] == "l").then(|| items[0].parse().unwrap()))
             .collect();
         assert_eq!(ends.len(), 1);
-        assert!((ends[0] - 10.25 * MM_TO_PT).abs() < 0.001);
+        // Coordinates are written to 0.01 pt (`pdf_compact`).
+        assert!((ends[0] - 10.25 * MM_TO_PT).abs() <= 0.005);
     }
 
     #[test]
@@ -4497,6 +4796,149 @@ mod tests {
         assert_eq!(numbers(function.get(b"C1").unwrap()), vec![1.0, 1.0, 1.0]);
     }
 
+    /// A page with a 20 × 10 mm rectangle plotted for object 31, at (30, 40).
+    fn linked_page() -> PdfPageInput {
+        let wire = PlotWire {
+            wire: WireModel::solid(
+                "31".into(),
+                vec![
+                    [30.0, 40.0, 0.0],
+                    [50.0, 40.0, 0.0],
+                    [50.0, 50.0, 0.0],
+                    [30.0, 50.0, 0.0],
+                    [30.0, 40.0, 0.0],
+                ],
+                [0.0, 0.0, 0.0, 1.0],
+                false,
+            ),
+            draw_depth: 0.0,
+        };
+        let mut page = test_page(vec![wire]);
+        page.content.links = vec![
+            crate::io::plot::PlotLink {
+                entity: Some(document::Handle::new(31)),
+                url: "https://example.org/a b".into(),
+                ..Default::default()
+            },
+            // Plots nothing: its own area, opening a page of the file.
+            crate::io::plot::PlotLink {
+                entity: Some(document::Handle::new(32)),
+                bounds: Some([100.0, 100.0, 140.0, 110.0]),
+                url: "sheets/b.dwg".into(),
+                location: "A1".into(),
+                destination: Some("Sheet B".into()),
+                ..Default::default()
+            },
+            // An address naming nothing and no page to open: no link.
+            crate::io::plot::PlotLink {
+                bounds: Some([0.0, 0.0, 10.0, 10.0]),
+                ..Default::default()
+            },
+        ];
+        page
+    }
+
+    fn near(rect: [f32; 4], mm: [f64; 4]) -> bool {
+        rect.iter()
+            .zip(mm)
+            .all(|(got, mm)| (*got as f64 - mm * MM_TO_PT as f64).abs() < 0.01)
+    }
+
+    /// A link covers its object's plotted ink, or its own area where it
+    /// plots none, and opens its address or a page of the file.
+    #[test]
+    fn links_cover_their_objects_and_open_their_targets() {
+        let annotations = page_link_annotations(&linked_page());
+        assert_eq!(annotations.len(), 2);
+        assert!(
+            near(annotations[0].0, [30.0, 40.0, 50.0, 50.0]),
+            "{annotations:?}"
+        );
+        assert_eq!(
+            annotations[0].1,
+            LinkAction::Uri("https://example.org/a%20b".into())
+        );
+        assert!(near(annotations[1].0, [100.0, 100.0, 140.0, 110.0]));
+        assert_eq!(annotations[1].1, LinkAction::Destination("Sheet B".into()));
+
+        // A page turned a quarter: x' = width - y, y' = x.
+        let mut turned = linked_page();
+        turned.rotation_deg = 90;
+        let annotations = page_link_annotations(&turned);
+        assert!(near(
+            annotations[0].0,
+            [210.0 - 50.0, 30.0, 210.0 - 40.0, 50.0]
+        ));
+        // A plot window leaves only what lies in it.
+        let mut windowed = linked_page();
+        windowed.clip = Some((0.0, 0.0, 40.0, 297.0));
+        let annotations = page_link_annotations(&windowed);
+        assert_eq!(annotations.len(), 1);
+        assert!(near(annotations[0].0, [30.0, 40.0, 40.0, 50.0]));
+    }
+
+    /// The PDF carries the links as annotations, and names the pages links
+    /// reach.
+    #[test]
+    fn links_become_annotations_and_named_pages() {
+        let mut target = test_page(Vec::new());
+        target.content.destination = Some("Sheet B".into());
+        let bytes = render_pdf_bytes(&[linked_page(), target], None).unwrap();
+        let doc = lopdf::Document::load_mem(&bytes).unwrap();
+        let pages: Vec<lopdf::ObjectId> = doc.get_pages().into_values().collect();
+        let page = doc.get_dictionary(pages[0]).unwrap();
+        let annotations: Vec<&lopdf::Dictionary> = page
+            .get(b"Annots")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| doc.get_dictionary(a.as_reference().unwrap()).unwrap())
+            .collect();
+        assert_eq!(annotations.len(), 2);
+        let action = |index: usize| annotations[index].get(b"A").unwrap().as_dict().unwrap();
+        assert_eq!(action(0).get(b"S").unwrap().as_name().unwrap(), b"URI");
+        assert_eq!(
+            action(0).get(b"URI").unwrap().as_str().unwrap(),
+            b"https://example.org/a%20b"
+        );
+        assert_eq!(action(1).get(b"S").unwrap().as_name().unwrap(), b"GoTo");
+        assert_eq!(action(1).get(b"D").unwrap().as_str().unwrap(), b"Sheet B");
+        let names = doc
+            .catalog()
+            .unwrap()
+            .get(b"Names")
+            .unwrap()
+            .as_dict()
+            .unwrap();
+        let list = names
+            .get(b"Dests")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"Names")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        assert_eq!(list[0].as_str().unwrap(), b"Sheet B");
+        assert_eq!(
+            list[1].as_array().unwrap()[0].as_reference().unwrap(),
+            pages[1]
+        );
+        // A page without links carries no annotations.
+        let annots = doc.get_dictionary(pages[1]).unwrap().get(b"Annots");
+        assert!(annots.is_err() || annots.unwrap().as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn link_addresses_become_uris() {
+        assert_eq!(link_uri("Blätter/a b.dwg", false), "Bl%C3%A4tter/a%20b.dwg");
+        assert_eq!(link_uri("..\\x\\y.dwg", false), "../x/y.dwg");
+        assert_eq!(link_uri("C:\\p\\y.dwg", false), "file:///C:/p/y.dwg");
+        assert_eq!(link_uri("/p/y.dwg", false), "file:///p/y.dwg");
+        assert_eq!(link_uri("mailto:a@b.de", true), "mailto:a@b.de");
+    }
+
     // Runs fully outside the export window never reach the content stream.
     #[test]
     fn clip_culls_runs_outside_the_export_window() {
@@ -4536,7 +4978,7 @@ mod tests {
         // or unfill them concurrently; a change between laying the quads out
         // and exporting them invalidates their tile keys, so retry until one
         // export runs against a stable, filled atlas.
-        let (bytes, text) = (0..20)
+        let (bytes, text, whole) = (0..20)
             .find_map(|_| {
                 let generation = sdf_atlas::generation();
                 if !sdf_atlas::textfill() {
@@ -4567,19 +5009,22 @@ mod tests {
                     },
                     draw_depth: 0.0,
                 };
-                let bytes = render_pdf_bytes(&[test_page(vec![wire])], None).unwrap();
+                let pages = [test_page(vec![wire])];
+                let bytes = render_pdf_bytes(&pages, None).unwrap();
+                let whole = render_pdf_document(&pages, None, FontEmbedding::Whole).unwrap();
                 let stable = sdf_atlas::generation() == generation && sdf_atlas::textfill();
                 stable.then(|| {
                     let text = pdf_stream_text(&bytes);
-                    (bytes, text)
+                    (bytes, text, whole)
                 })
             })
             .expect("the shared glyph atlas never held still for one export");
         assert!(text.contains(" Tf"), "glyphs drawn as text in a font");
+        assert_eq!(text.matches(" TJ").count(), 3, "each glyph shown once");
         assert_eq!(
-            text.matches(" Tm").count(),
-            3,
-            "one positioned text object per glyph"
+            text.matches("BT").count(),
+            1,
+            "the glyphs of a run share one text object"
         );
         assert!(
             String::from_utf8_lossy(&bytes).contains("/FontFile2"),
@@ -4592,5 +5037,41 @@ mod tests {
             bytes.len(),
             source.font.data.len()
         );
+        // For a published set a plain TrueType face goes in whole, so every
+        // drawing embeds the same program; the glyphs keep their ids.
+        let programs: Vec<Vec<u8>> = whole
+            .objects
+            .values()
+            .filter_map(|object| object.as_dict().ok())
+            .filter_map(|dict| dict.get(b"FontFile2").ok()?.as_reference().ok())
+            .map(|id| {
+                let stream = whole.get_object(id).unwrap().as_stream().unwrap();
+                stream
+                    .decompressed_content()
+                    .unwrap_or(stream.content.clone())
+            })
+            .collect();
+        assert_eq!(programs.len(), 1, "one face embedded");
+        let font = &source.font;
+        let plain_truetype = font.index == 0
+            && font.data.len() <= 4 << 20
+            && (font.data.starts_with(&[0, 1, 0, 0]) || font.data.starts_with(b"true"));
+        if plain_truetype {
+            assert!(programs[0] == font.data, "the face is embedded whole");
+            let gid = source.gid;
+            let shown = format!("<{gid:04X}>");
+            let page = whole.get_pages().into_values().next().unwrap();
+            let content =
+                String::from_utf8_lossy(&whole.get_page_content(page).unwrap()).into_owned();
+            assert!(
+                content.contains(&shown),
+                "glyph {gid} keeps its id in {content}"
+            );
+        } else {
+            assert!(
+                programs[0].len() < font.data.len(),
+                "a collection or a big face is subset"
+            );
+        }
     }
 }

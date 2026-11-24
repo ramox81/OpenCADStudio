@@ -29,6 +29,7 @@ pub(crate) fn linetype_library_lock() -> std::sync::MutexGuard<'static, ()> {
 mod revcloud_vars;
 pub(crate) use purge::purge_pass;
 mod block_editor_vars;
+mod bricscad_visibility;
 mod bvisibility;
 mod count;
 mod dash;
@@ -816,6 +817,9 @@ impl OpenCADStudio {
         if let Some(t) = self.dispatch_model_import(cmd, i) {
             return Some(t);
         }
+        if let Some(t) = self.dispatch_bricscad_visibility(cmd, i) {
+            return Some(t);
+        }
         if let Some(t) = self.dispatch_bvisibility(cmd, i) {
             return Some(t);
         }
@@ -992,7 +996,17 @@ pub fn start_allowed(cmd: &str) -> bool {
     // opens the drawings it works on by path, and EXIT answers its save
     // questions from any tab.
     let verb = cmd.split_whitespace().next().unwrap_or("");
+    // A sheet list PUBLISH opens the drawings it names; PUBLISHNEXT is its
+    // step between two of them.
+    let sheet_list = verb == "PUBLISHNEXT"
+        || matches!(verb, "PUBLISH" | "-PUBLISH")
+            && cmd
+                .trim_end()
+                .trim_end_matches('"')
+                .to_ascii_lowercase()
+                .ends_with(".dsd");
     is_spacemouse_command(cmd)
+        || sheet_list
         || matches!(verb, "OPEN" | "SCRIPT" | "SCR" | "FILEDIA" | "SDI" | "EXIT")
         || matches!(
             cmd,

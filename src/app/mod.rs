@@ -36,6 +36,10 @@ mod block_test;
 #[cfg(test)]
 mod block_test_tests;
 mod block_visibility;
+#[cfg(test)]
+mod bricscad_visibility_tests;
+#[cfg(test)]
+mod visibilitystates_tests;
 pub(crate) mod calc;
 mod command_driver;
 mod extraction_catalog;
@@ -72,6 +76,8 @@ pub(crate) mod filter_dialog;
 mod find_replace;
 pub(crate) mod text_match;
 mod geographic_location;
+#[cfg(not(target_arch = "wasm32"))]
+mod sheet_publish;
 pub(crate) mod helpers;
 mod history;
 mod layer_filter_store;
@@ -1461,6 +1467,7 @@ pub(super) struct OpenCADStudio {
     /// Point Cloud Manager palette (POINTCLOUDMANAGER).
     pub(crate) pc_manager: crate::ui::window::pc_manager::PcManager,
     pub(crate) count_palette: crate::ui::window::count_palette::CountPalette,
+    pub(crate) bricscad_visibility: crate::ui::window::bricscad_visibility::VisibilityPanel,
     /// The QuickCalc pallet (QUICKCALC / QC).
     pub(crate) quick_calc: crate::ui::window::quick_calc::QuickCalcPalette,
     /// The Assistant pallet (ASSISTANT): chat with an external AI agent about this drawing.
@@ -1651,6 +1658,12 @@ pub(super) struct OpenCADStudio {
     pub(crate) panel_widget_ui: std::collections::BTreeMap<
         String,
         crate::ui::window::plugin_widgets::WidgetUiState,
+    >,
+    /// Host-local EDITING session per panel id (api v29): draft cells
+    /// and selection. The plugin stays the data authority.
+    pub(crate) panel_table_ui: std::collections::BTreeMap<
+        String,
+        crate::ui::window::plugin_tables::TableUiState,
     >,
     /// Numeric mapping for PanelId::Plugin(u32).
     pub(crate) plugin_panel_ids: std::collections::HashMap<String, u32>,
@@ -2281,6 +2294,9 @@ pub(super) struct OpenCADStudio {
     /// cannot mark a newer document state clean or redirect its path.
     #[cfg(not(target_arch = "wasm32"))]
     active_save_jobs: std::collections::HashMap<u64, u64>,
+    /// The sheet list PUBLISH is working through, between its script steps.
+    #[cfg(not(target_arch = "wasm32"))]
+    sheet_publish: Option<Box<sheet_publish::SheetPublish>>,
     #[cfg(not(target_arch = "wasm32"))]
     save_job_serial: u64,
     /// Destination leases held while Save As workers are active.
@@ -3185,6 +3201,7 @@ impl OpenCADStudio {
             show_browser: false,
             pc_manager: Default::default(),
             count_palette: Default::default(),
+            bricscad_visibility: Default::default(),
             quick_calc: Default::default(),
             assistant: Default::default(),
             sheet_set: Default::default(),
@@ -3264,6 +3281,7 @@ impl OpenCADStudio {
             panel_event_router:
                 crate::app::panel_events::PanelEventRouter::new(),
             panel_widget_ui: std::collections::BTreeMap::new(),
+            panel_table_ui: std::collections::BTreeMap::new(),
             plugin_panel_ids: std::collections::HashMap::new(),
             plugin_panel_by_num: std::collections::HashMap::new(),
             hyperlink_editor_handles: Vec::new(),
@@ -3416,6 +3434,8 @@ impl OpenCADStudio {
             pending_block_close: None,
             #[cfg(not(target_arch = "wasm32"))]
             active_save_jobs: std::collections::HashMap::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            sheet_publish: None,
             #[cfg(not(target_arch = "wasm32"))]
             save_job_serial: 0,
             #[cfg(not(target_arch = "wasm32"))]
